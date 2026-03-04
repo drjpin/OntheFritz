@@ -10,6 +10,8 @@ const ArgumentDecider = dynamic(() => import('@/components/decider/ArgumentDecid
 const WorldCams = dynamic(() => import('@/components/webcams/WorldCams'), { ssr: false })
 const LiveChat = dynamic(() => import('@/components/chat/LiveChat'), { ssr: false })
 const Leaderboard = dynamic(() => import('@/components/leaderboard/Leaderboard'), { ssr: false })
+const FloatingChat = dynamic(() => import('@/components/chat/FloatingChat'), { ssr: false })
+const DailyChallenge = dynamic(() => import('@/components/arcade/DailyChallenge'), { ssr: false })
 
 type Section = 'home' | 'arcade' | 'decider' | 'cams' | 'pit'
 type GameTab = 'breakout' | 'snake' | 'tetris'
@@ -35,6 +37,8 @@ export default function Home() {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      {/* Floating Pit chat — hidden on The Pit page since full chat is there */}
+      {section !== 'pit' && <FloatingChat section={section} />}
       {/* AdSense top banner placeholder */}
       <div style={{ textAlign: 'center', padding: '8px', background: 'rgba(0,0,0,0.3)', borderBottom: '1px solid var(--border-glow)', minHeight: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {/* Google AdSense banner goes here */}
@@ -215,13 +219,14 @@ export default function Home() {
                 )}
               </div>
 
-              {/* Leaderboard sidebar */}
+              {/* Leaderboard + Daily sidebar */}
               <div style={{ flexShrink: 0 }}>
                 <Leaderboard
                   activeGame={gameTab}
                   pendingScore={pendingScore?.game === gameTab ? pendingScore : null}
                   onScoreSubmitted={() => setPendingScore(null)}
                 />
+                <DailyChallenge game={gameTab} />
               </div>
             </div>
           </div>

@@ -12,11 +12,11 @@ type Score = {
 }
 
 const MEDALS = ['🥇', '🥈', '🥉']
-const GAMES = ['breakout', 'snake', 'trism']
+const GAMES = ['breakout', 'snake', 'tetris']
 const GAME_LABELS: Record<string, string> = {
   breakout: 'BREAKOUT',
   snake: 'SNAKE',
-  trism: 'TRISM',
+  tetris: 'TETRIS',
 }
 
 interface LeaderboardProps {
@@ -74,6 +74,12 @@ export default function Leaderboard({ activeGame, pendingScore, onScoreSubmitted
           avatar_url: avatarUrl || null,
         }),
       })
+      // Also submit to daily challenge
+      fetch('/api/daily', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ game: pendingScore.game, username: username.trim(), score: pendingScore.score }),
+      }).catch(() => {})
       setSubmitDone(true)
       setShowSubmit(false)
       fetchScores(pendingScore.game)
@@ -204,10 +210,23 @@ export default function Leaderboard({ activeGame, pendingScore, onScoreSubmitted
           </button>
         </div>
       )}
-      {submitDone && (
-        <p className="vt323 text-center mt-4 glow-green" style={{ fontSize: '20px' }}>
-          Score submitted! ✓
-        </p>
+      {submitDone && pendingScore && (
+        <div className="mt-4 flex flex-col items-center gap-3">
+          <p className="vt323 text-center glow-green" style={{ fontSize: '20px' }}>Score submitted! ✓</p>
+          <a
+            href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(`Just scored ${pendingScore.score.toLocaleString()} on ${(GAME_LABELS[pendingScore.game] || pendingScore.game).toUpperCase()} at onthefritz.us 🕹️ Can you beat me? #OnTheFritz`)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              fontFamily: 'Press Start 2P', fontSize: '8px', padding: '8px 14px',
+              background: 'rgba(29,161,242,0.1)', border: '2px solid #1DA1F2',
+              color: '#1DA1F2', cursor: 'pointer', textDecoration: 'none', display: 'inline-block',
+              letterSpacing: '1px',
+            }}
+          >
+            🐦 BRAG ABOUT THIS
+          </a>
+        </div>
       )}
     </div>
   )
