@@ -12,6 +12,8 @@ const BRICK_COLORS = ['#ff006e', '#ff9f00', '#ffff00', '#00ffff', '#00ff9f']
 
 export default function Breakout({ onScoreSubmit }: BreakoutProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [isFullscreen, setIsFullscreen] = useState(false)
   const gameRef = useRef<{
     ball: { x: number; y: number; dx: number; dy: number; r: number }
     paddle: { x: number; w: number; h: number }
@@ -26,6 +28,17 @@ export default function Breakout({ onScoreSubmit }: BreakoutProps) {
   const [displayScore, setDisplayScore] = useState(0)
   const [displayLives, setDisplayLives] = useState(3)
   const keysRef = useRef<{ left: boolean; right: boolean }>({ left: false, right: false })
+
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement)
+    document.addEventListener('fullscreenchange', onChange)
+    return () => document.removeEventListener('fullscreenchange', onChange)
+  }, [])
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) containerRef.current?.requestFullscreen?.().catch(() => {})
+    else document.exitFullscreen?.()
+  }
 
   const getCanvas = () => canvasRef.current
   const getCtx = () => canvasRef.current?.getContext('2d')
@@ -207,20 +220,48 @@ export default function Breakout({ onScoreSubmit }: BreakoutProps) {
   }, [])
 
   // Mouse/touch control
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+  const movePaddleTo = useCallback((clientX: number) => {
     if (!gameRef.current || gameState !== 'playing') return
     const canvas = canvasRef.current
     if (!canvas) return
     const rect = canvas.getBoundingClientRect()
-    const mouseX = e.clientX - rect.left
-    gameRef.current.paddle.x = Math.max(0, Math.min(canvas.width - gameRef.current.paddle.w, mouseX - gameRef.current.paddle.w / 2))
+    const scaleX = canvas.width / rect.width
+    const relX = (clientX - rect.left) * scaleX
+    gameRef.current.paddle.x = Math.max(0, Math.min(canvas.width - gameRef.current.paddle.w, relX - gameRef.current.paddle.w / 2))
   }, [gameState])
 
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    movePaddleTo(e.clientX)
+  }, [movePaddleTo])
+
+  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault()
+    movePaddleTo(e.touches[0].clientX)
+  }, [movePaddleTo])
+
+  const handleTouchStart = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault()
+    movePaddleTo(e.touches[0].clientX)
+  }, [movePaddleTo])
+
   return (
-    <div className="flex flex-col items-center gap-4">
+    <div
+      ref={containerRef}
+      style={{ background: '#05050f', padding: isFullscreen ? '16px' : '0', display: 'flex', flexDirection: 'column', alignItems: 'center' }}
+    >
+      <div className="flex flex-col items-center gap-4">
       <div className="flex gap-8 w-full justify-between mb-2">
         <span className="vt323 text-2xl glow-green">SCORE: {displayScore}</span>
-        <span className="vt323 text-2xl glow-pink">{'♥ '.repeat(displayLives)}</span>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <span className="vt323 text-2xl glow-pink">{'♥ '.repeat(displayLives)}</span>
+          <button
+            onClick={toggleFullscreen}
+            title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+            style={{ background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(0,255,159,0.3)', color: 'rgba(0,255,159,0.7)', cursor: 'pointer', fontSize: '14px', padding: '2px 6px' }}
+          >
+            {isFullscreen ? '⊠' : '⛶'}
+          </button>
+        </div>
       </div>
       <div className="relative">
         <canvas
@@ -228,8 +269,10 @@ export default function Breakout({ onScoreSubmit }: BreakoutProps) {
           width={480}
           height={520}
           className="border-2 border-neon-green box-glow-green block max-w-full"
-          style={{ borderColor: 'var(--neon-green)', cursor: 'none' }}
+          style={{ borderColor: 'var(--neon-green)', cursor: 'none', touchAction: 'none' }}
           onMouseMove={handleMouseMove}
+          onTouchMove={handleTouchMove}
+          onTouchStart={handleTouchStart}
         />
         {gameState === 'idle' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70">
@@ -247,8 +290,9 @@ export default function Breakout({ onScoreSubmit }: BreakoutProps) {
         )}
       </div>
       <p className="vt323 text-center" style={{ color: 'rgba(0,255,159,0.4)', fontSize: '16px' }}>
-        Move mouse over game or use ← → arrow keys
+        Touch/drag the game or use ← → arrow keys
       </p>
+    </div>
     </div>
   )
 }
