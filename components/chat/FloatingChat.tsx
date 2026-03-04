@@ -5,7 +5,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 interface Message {
   id: string
   username: string
-  text: string
+  message: string
   created_at: string
 }
 
@@ -49,12 +49,13 @@ export default function FloatingChat({ section }: { section: string }) {
     try {
       const res = await fetch('/api/chat')
       if (!res.ok) return
-      const data: Message[] = await res.json()
-      setMessages(data)
-      if (data.length > prevCountRef.current && !isOpenRef.current) {
-        setUnread(u => u + (data.length - prevCountRef.current))
+      const data = await res.json()
+      const msgs: Message[] = data.messages || []
+      setMessages(msgs)
+      if (msgs.length > prevCountRef.current && !isOpenRef.current) {
+        setUnread(u => u + (msgs.length - prevCountRef.current))
       }
-      prevCountRef.current = data.length
+      prevCountRef.current = msgs.length
     } catch { /* silently fail */ }
   }, [])
 
@@ -80,7 +81,7 @@ export default function FloatingChat({ section }: { section: string }) {
       await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: displayName, text: text.trim() }),
+        body: JSON.stringify({ username: displayName, message: text.trim() }),
       })
       setText('')
       fetchMessages()
@@ -191,7 +192,7 @@ export default function FloatingChat({ section }: { section: string }) {
                       {msg.username}:{' '}
                     </span>
                     <span className="vt323" style={{ color: 'rgba(255,255,255,0.8)', fontSize: '13px' }}>
-                      {msg.text}
+                      {msg.message}
                     </span>
                   </div>
                 ))}
