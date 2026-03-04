@@ -5,14 +5,14 @@ import dynamic from 'next/dynamic'
 
 const Breakout = dynamic(() => import('@/components/games/Breakout'), { ssr: false })
 const Snake = dynamic(() => import('@/components/games/Snake'), { ssr: false })
-const Trism = dynamic(() => import('@/components/games/Trism'), { ssr: false })
+const Tetris = dynamic(() => import('@/components/games/Tetris'), { ssr: false })
 const ArgumentDecider = dynamic(() => import('@/components/decider/ArgumentDecider'), { ssr: false })
 const WorldCams = dynamic(() => import('@/components/webcams/WorldCams'), { ssr: false })
 const LiveChat = dynamic(() => import('@/components/chat/LiveChat'), { ssr: false })
 const Leaderboard = dynamic(() => import('@/components/leaderboard/Leaderboard'), { ssr: false })
 
 type Section = 'home' | 'arcade' | 'decider' | 'cams' | 'pit'
-type GameTab = 'breakout' | 'snake' | 'trism'
+type GameTab = 'breakout' | 'snake' | 'tetris'
 
 const NAV_ITEMS: { id: Section; label: string; emoji: string }[] = [
   { id: 'home', label: 'HOME', emoji: '📺' },
@@ -24,7 +24,7 @@ const NAV_ITEMS: { id: Section; label: string; emoji: string }[] = [
 
 export default function Home() {
   const [section, setSection] = useState<Section>('home')
-  const [gameTab, setGameTab] = useState<GameTab>('breakout')
+  const [gameTab, setGameTab] = useState<GameTab>('tetris')
   const [pendingScore, setPendingScore] = useState<{ game: string; score: number } | null>(null)
 
   const handleScoreSubmit = useCallback((game: string) => (score: number) => {
@@ -126,7 +126,7 @@ export default function Home() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
               {[
-                { id: 'arcade' as Section, emoji: '🕹️', title: 'ARCADE', color: 'var(--neon-green)', desc: 'Classic games. Breakout. Snake. Trism. High scores. Glory.' },
+                { id: 'arcade' as Section, emoji: '🕹️', title: 'ARCADE', color: 'var(--neon-green)', desc: 'Classic games. Breakout. Snake. Tetris. High scores. Glory.' },
                 { id: 'decider' as Section, emoji: '⚖️', title: 'THE DECIDER', color: 'var(--neon-pink)', desc: 'Submit an argument. Get a ruthless verdict. Settle it forever.' },
                 { id: 'cams' as Section, emoji: '🌍', title: 'WORLD CAMS', color: 'var(--neon-cyan)', desc: 'Peek at live feeds from around the planet. Just vibes.' },
                 { id: 'pit' as Section, emoji: '💬', title: 'THE PIT', color: 'var(--neon-yellow)', desc: 'Live chat. Clears every 24 hours. No receipts.' },
@@ -180,7 +180,7 @@ export default function Home() {
 
             {/* Game tabs */}
             <div className="flex gap-3 mb-8 flex-wrap">
-              {(['breakout', 'snake', 'trism'] as GameTab[]).map(g => (
+              {(['breakout', 'snake', 'tetris'] as GameTab[]).map(g => (
                 <button
                   key={g}
                   onClick={() => setGameTab(g)}
@@ -210,8 +210,8 @@ export default function Home() {
                 {gameTab === 'snake' && (
                   <Snake onScoreSubmit={handleScoreSubmit('snake')} />
                 )}
-                {gameTab === 'trism' && (
-                  <Trism onScoreSubmit={handleScoreSubmit('trism')} />
+                {gameTab === 'tetris' && (
+                  <Tetris onScoreSubmit={handleScoreSubmit('tetris')} />
                 )}
               </div>
 

@@ -3,14 +3,14 @@
 import { useState } from 'react'
 
 const CAMS = [
-  { name: 'Times Square, NYC', url: 'https://www.youtube.com/embed/oJEDPINfqkk?autoplay=1&mute=1', location: 'New York, USA', emoji: '🗽' },
-  { name: 'Tokyo Shibuya Crossing', url: 'https://www.youtube.com/embed/d-MGkKDOFjQ?autoplay=1&mute=1', location: 'Tokyo, Japan', emoji: '🗼' },
-  { name: 'Niagara Falls', url: 'https://www.youtube.com/embed/0Q3_FGKrVHQ?autoplay=1&mute=1', location: 'Ontario, Canada', emoji: '🌊' },
-  { name: 'Eiffel Tower', url: 'https://www.youtube.com/embed/IjLzbGzxJhQ?autoplay=1&mute=1', location: 'Paris, France', emoji: '🗼' },
-  { name: 'Northern Lights', url: 'https://www.youtube.com/embed/DQoKFbamFOQ?autoplay=1&mute=1', location: 'Iceland', emoji: '🌌' },
-  { name: 'Sydney Harbour', url: 'https://www.youtube.com/embed/BNt_oAv0YVg?autoplay=1&mute=1', location: 'Sydney, Australia', emoji: '🦘' },
+  { name: 'Times Square, NYC', url: 'https://www.youtube.com/embed/rnXIjl_Rzy4?autoplay=1&mute=1', location: 'New York, USA', emoji: '🗽' },
+  { name: 'Shibuya Crossing', url: 'https://www.youtube.com/embed/dfVK7ld38Ys?autoplay=1&mute=1', location: 'Tokyo, Japan', emoji: '🗼' },
+  { name: 'Niagara Falls', url: 'https://www.youtube.com/embed/3KhQK5KG7VU?autoplay=1&mute=1', location: 'Ontario, Canada', emoji: '🌊' },
+  { name: 'Eiffel Tower', url: 'https://www.youtube.com/embed/OzYp4NRZlwQ?autoplay=1&mute=1', location: 'Paris, France', emoji: '🗼' },
+  { name: 'Northern Lights', url: 'https://www.youtube.com/embed/ccTVAhJU5lg?autoplay=1&mute=1', location: 'Finland', emoji: '🌌' },
+  { name: 'Sydney Harbour', url: 'https://www.youtube.com/embed/5uZa3-RMFos?autoplay=1&mute=1', location: 'Sydney, Australia', emoji: '🦘' },
   { name: 'African Waterhole', url: 'https://www.youtube.com/embed/ydYDqZQpim8?autoplay=1&mute=1', location: 'Kruger Park, South Africa', emoji: '🦁' },
-  { name: 'International Space Station', url: 'https://www.youtube.com/embed/P9C25Un7xaM?autoplay=1&mute=1', location: 'Low Earth Orbit', emoji: '🚀' },
+  { name: 'Space Station (ISS)', url: 'https://www.youtube.com/embed/vytmBNhc9ig?autoplay=1&mute=1', location: 'Low Earth Orbit', emoji: '🚀' },
 ]
 
 export default function WorldCams() {
