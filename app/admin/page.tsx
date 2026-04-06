@@ -253,10 +253,9 @@ function AITab({ token, account, setAccount }: { token: string; account: Account
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // Build preview URL from Supabase storage
+  // Preview route proxies files through Next.js (same origin, correct headers)
   useEffect(() => {
-    const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/sites/${account.id}/index.html`
-    setPreviewUrl(url)
+    setPreviewUrl(`/preview/${account.id}/index.html`)
   }, [account.id])
 
   async function handleSend(e: React.FormEvent) {
