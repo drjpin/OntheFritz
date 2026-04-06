@@ -20,7 +20,12 @@ export async function POST(req: NextRequest) {
     { path: 'script.js', content: DEFAULT_JS },
   ]
 
-  await writeSiteFiles(account.id, files)
+  try {
+    await writeSiteFiles(account.id, files)
+  } catch (err) {
+    console.error('Init storage error:', err)
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
 
   // Save as version 1
   const sb = getSupabaseAdmin()

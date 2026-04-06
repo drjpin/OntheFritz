@@ -40,10 +40,11 @@ export async function writeSiteFile(accountId: string, path: string, content: st
   const sb = getSupabaseAdmin()
   const contentType = getContentType(path)
   const blob = new Blob([content], { type: contentType })
-  await sb.storage.from('sites').upload(`${accountId}/${path}`, blob, {
+  const { error } = await sb.storage.from('sites').upload(`${accountId}/${path}`, blob, {
     upsert: true,
     contentType,
   })
+  if (error) throw new Error(`Storage upload failed for ${path}: ${error.message}`)
 }
 
 // Write multiple files

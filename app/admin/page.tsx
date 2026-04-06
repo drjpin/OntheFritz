@@ -106,6 +106,7 @@ export default function AdminPage() {
   const [account, setAccount] = useState<Account | null>(null)
   const [tab, setTab] = useState<'ai' | 'files' | 'versions' | 'settings'>('ai')
   const [initializing, setInitializing] = useState(false)
+  const [initError, setInitError] = useState('')
   const [siteExists, setSiteExists] = useState(false)
   const [checkingAuth, setCheckingAuth] = useState(true)
 
@@ -149,9 +150,17 @@ export default function AdminPage() {
   async function handleInit() {
     if (!token) return
     setInitializing(true)
+    setInitError('')
     try {
       const res = await api('/api/init', { method: 'POST', token })
-      if (res.ok) setSiteExists(true)
+      const data = await res.json()
+      if (res.ok) {
+        setSiteExists(true)
+      } else {
+        setInitError(data.error ?? 'Init failed')
+      }
+    } catch {
+      setInitError('Network error')
     } finally {
       setInitializing(false)
     }
@@ -189,6 +198,7 @@ export default function AdminPage() {
             <button onClick={handleInit} disabled={initializing} style={{ ...btnStyle, background: initializing ? '#334155' : '#2563eb', padding: '0.875rem 2rem', fontSize: '1rem' }}>
               {initializing ? 'Setting up…' : 'Initialize My Site'}
             </button>
+            {initError && <p style={{ color: '#f87171', fontSize: '0.875rem', marginTop: '1rem' }}>❌ {initError}</p>}
           </div>
         </div>
       )}
