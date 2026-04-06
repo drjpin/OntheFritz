@@ -23,14 +23,14 @@ CRITICAL RULES — you must follow these exactly:
 - The returned JSON must have EXACTLY the same top-level structure and field names as the input
 - NEVER change the data type of any field (e.g. if a field is a string, keep it a string; if it is an object, keep it an object; if it is an array, keep it an array)
 - NEVER add new top-level keys that don't exist in the input
-- The "about" field is always a single object with these exact keys: doctorName, title, bio, yearsExperience, education — never change it to an array
+- The "doctors" field is always an array of objects, each with exactly these keys: name, title, bio, yearsExperience, education — never change it to a non-array
 - The "services" field is always an array of objects with "title" and "description" keys only
 - The "testimonials" field is always an array of objects with "name", "text", and "rating" keys only
 - The "blog" field is always an array of objects with "title", "excerpt", "date", and "slug" keys only
 - The "hours" field is always an object with day names as keys and time strings as values
 - The "style" field always has exactly these keys: primaryColor, accentColor, bgColor
 
-If a request cannot be fulfilled within this structure (e.g. adding a second doctor profile when only one is supported), do your best within the existing structure — for example, add the second doctor's info to the bio field of the existing about object.
+If asked to add a doctor, add a new object to the "doctors" array with all required keys: name, title, bio, yearsExperience, education.
 
 - Make only the changes requested — don't alter anything else
 - For blog posts, generate professional, helpful health content related to chiropractic care
@@ -94,8 +94,9 @@ export async function POST(req: NextRequest) {
       typeof updatedContent?.practice !== 'object' || Array.isArray(updatedContent.practice) ||
       typeof updatedContent?.hero !== 'object' || Array.isArray(updatedContent.hero) ||
       !Array.isArray(updatedContent?.services) ||
-      typeof updatedContent?.about !== 'object' || Array.isArray(updatedContent.about) ||
-      typeof updatedContent?.about?.doctorName !== 'string' ||
+      !Array.isArray(updatedContent?.doctors) ||
+      updatedContent.doctors.length === 0 ||
+      typeof updatedContent?.doctors?.[0]?.name !== 'string' ||
       !Array.isArray(updatedContent?.testimonials) ||
       typeof updatedContent?.hours !== 'object' || Array.isArray(updatedContent.hours) ||
       !Array.isArray(updatedContent?.blog) ||

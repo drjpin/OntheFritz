@@ -26,7 +26,7 @@ export default function PreviewPage() {
     </div>
   )
 
-  const { practice, hero, services, about, testimonials, hours, blog, style } = content
+  const { practice, hero, services, doctors, testimonials, hours, blog, style } = content
   const p = style.primaryColor
   const a = style.accentColor
 
@@ -88,11 +88,16 @@ export default function PreviewPage() {
 
       <section style={{ padding: '96px 0', background: style.bgColor }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 24px' }}>
-          <div className="section-label">Meet Your Doctor</div>
-          <h2 className="section-heading">{about.doctorName}</h2>
-          <div style={{ color: a, fontWeight: 600, fontSize: '16px', marginBottom: '16px' }}>{about.title}</div>
-          {about.bio.split('\n\n').map((para, i) => (
-            <p key={i} style={{ color: '#475569', fontSize: '16px', lineHeight: 1.8, marginBottom: '16px' }}>{para}</p>
+          <div className="section-label">Meet the Team</div>
+          <h2 className="section-heading" style={{ marginBottom: '48px' }}>{doctors.length === 1 ? 'Meet Your Doctor' : 'Meet Our Doctors'}</h2>
+          {doctors.map((doc, i) => (
+            <div key={i} style={{ marginBottom: '48px' }}>
+              <h3 style={{ fontWeight: 800, fontSize: '24px', color: p, marginBottom: '4px' }}>{doc.name}</h3>
+              <div style={{ color: a, fontWeight: 600, fontSize: '15px', marginBottom: '16px' }}>{doc.title}</div>
+              {doc.bio.split('\n\n').map((para, j) => (
+                <p key={j} style={{ color: '#475569', fontSize: '16px', lineHeight: 1.8, marginBottom: '14px' }}>{para}</p>
+              ))}
+            </div>
           ))}
         </div>
       </section>

@@ -14,7 +14,7 @@ export default function ChiroSite() {
       .catch(() => {})
   }, [])
 
-  const { practice, hero, services, about, testimonials, hours, blog, style } = content
+  const { practice, hero, services, doctors, testimonials, hours, blog, style } = content
   const p = style.primaryColor
   const a = style.accentColor
 
@@ -123,7 +123,7 @@ export default function ChiroSite() {
             {[
               { icon: '⭐', text: '5-Star Rated on Google' },
               { icon: '📅', text: 'Same-Week Appointments' },
-              { icon: '🏥', text: `${about.yearsExperience}+ Years of Experience` },
+              { icon: '🏥', text: `${doctors[0]?.yearsExperience ?? 0}+ Years of Experience` },
               { icon: '👨‍👩‍👧', text: 'All Ages Welcome' },
             ].map(item => (
               <div key={item.text} style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#475569', fontSize: '15px', fontWeight: 500 }}>
@@ -164,36 +164,42 @@ export default function ChiroSite() {
       {/* ── ABOUT ── */}
       <section id="about" className="site-section-alt">
         <div className="site-container">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '64px', alignItems: 'center' }}>
-            {/* Photo placeholder */}
-            <div style={{ borderRadius: '16px', overflow: 'hidden', background: `linear-gradient(135deg, ${p}22 0%, ${a}33 100%)`, border: `2px solid ${a}33`, aspectRatio: '4/5', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px' }}>
-              <div style={{ width: '120px', height: '120px', borderRadius: '50%', background: `${a}33`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <svg width="64" height="64" fill="none" stroke={a} strokeWidth="1.5" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-              </div>
-              <div style={{ textAlign: 'center', color: a, fontWeight: 600, fontSize: '14px', opacity: 0.7 }}>Doctor Photo Here</div>
-            </div>
-
-            {/* Text */}
-            <div>
-              <div className="section-label">Meet Your Doctor</div>
-              <h2 className="section-heading">{about.doctorName}</h2>
-              <div style={{ color: a, fontWeight: 600, fontSize: '16px', marginBottom: '24px' }}>{about.title}</div>
-              {about.bio.split('\n\n').map((para, i) => (
-                <p key={i} style={{ color: '#475569', fontSize: '16px', lineHeight: 1.8, marginBottom: '16px' }}>{para}</p>
-              ))}
-              <div style={{ display: 'flex', gap: '32px', marginTop: '32px', flexWrap: 'wrap' }}>
-                <div>
-                  <div style={{ fontSize: '36px', fontWeight: 800, color: p }}>{about.yearsExperience}+</div>
-                  <div style={{ fontSize: '14px', color: '#64748b', fontWeight: 500 }}>Years Experience</div>
+          <div style={{ textAlign: 'center', marginBottom: '64px' }}>
+            <div className="section-label">Meet the Team</div>
+            <h2 className="section-heading">{doctors.length === 1 ? 'Meet Your Doctor' : 'Meet Our Doctors'}</h2>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '64px' }}>
+            {doctors.map((doc, i) => (
+              <div key={i} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '48px', alignItems: 'center' }}>
+                {/* Photo placeholder */}
+                <div style={{ borderRadius: '16px', background: `linear-gradient(135deg, ${p}22 0%, ${a}33 100%)`, border: `2px solid ${a}33`, aspectRatio: '4/5', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px', maxHeight: '400px' }}>
+                  <div style={{ width: '100px', height: '100px', borderRadius: '50%', background: `${a}33`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <svg width="52" height="52" fill="none" stroke={a} strokeWidth="1.5" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  </div>
+                  <div style={{ color: a, fontWeight: 600, fontSize: '13px', opacity: 0.7 }}>Doctor Photo Here</div>
                 </div>
+                {/* Text */}
                 <div>
-                  <div style={{ fontSize: '14px', color: '#64748b', fontWeight: 500, marginTop: '8px' }}>Education</div>
-                  <div style={{ fontSize: '15px', fontWeight: 600, color: p }}>{about.education}</div>
+                  <h3 style={{ fontSize: '28px', fontWeight: 800, color: p, marginBottom: '6px' }}>{doc.name}</h3>
+                  <div style={{ color: a, fontWeight: 600, fontSize: '16px', marginBottom: '20px' }}>{doc.title}</div>
+                  {doc.bio.split('\n\n').map((para, j) => (
+                    <p key={j} style={{ color: '#475569', fontSize: '16px', lineHeight: 1.8, marginBottom: '14px' }}>{para}</p>
+                  ))}
+                  <div style={{ display: 'flex', gap: '32px', marginTop: '24px', flexWrap: 'wrap' }}>
+                    <div>
+                      <div style={{ fontSize: '32px', fontWeight: 800, color: p }}>{doc.yearsExperience}+</div>
+                      <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 500 }}>Years Experience</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 500, marginBottom: '4px' }}>Education</div>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: p }}>{doc.education}</div>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
+            ))}
           </div>
         </div>
       </section>

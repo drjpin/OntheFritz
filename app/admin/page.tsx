@@ -207,7 +207,7 @@ function ContentEditor({ draft, setDraft, onSaveDraft, onPublish, saving, publis
     { id: 'practice', label: 'Practice Info' },
     { id: 'hero', label: 'Hero' },
     { id: 'services', label: 'Services' },
-    { id: 'about', label: 'About / Doctor' },
+    { id: 'about', label: 'Doctors' },
     { id: 'hours', label: 'Hours' },
     { id: 'testimonials', label: 'Testimonials' },
     { id: 'blog', label: 'Blog Posts' },
@@ -337,25 +337,38 @@ function ContentEditor({ draft, setDraft, onSaveDraft, onPublish, saving, publis
 
         {/* About */}
         {tab === 'about' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <h3 style={{ fontWeight: 700, fontSize: '16px', color: '#374151' }}>About / Doctor</h3>
-            {([
-              ['Doctor Name', 'doctorName'],
-              ['Title / Credentials', 'title'],
-              ['Education', 'education'],
-            ] as [string, string][]).map(([label, key]) => (
-              <div key={key}>
-                <label className="admin-label">{label}</label>
-                <input className="admin-input" value={String(draft.about[key as keyof typeof draft.about])} onChange={e => update(['about', key], e.target.value)} />
-              </div>
-            ))}
-            <div>
-              <label className="admin-label">Years of Experience</label>
-              <input className="admin-input" type="number" value={draft.about.yearsExperience} onChange={e => update(['about', 'yearsExperience'], parseInt(e.target.value) || 0)} style={{ maxWidth: '120px' }} />
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ fontWeight: 700, fontSize: '16px', color: '#374151' }}>Doctors ({draft.doctors.length})</h3>
+              <button onClick={() => update(['doctors'], [...draft.doctors, { name: 'Dr. New Doctor', title: 'Doctor of Chiropractic', bio: 'Bio here.', yearsExperience: 1, education: 'Chiropractic College' }])} className="admin-btn admin-btn-secondary">+ Add Doctor</button>
             </div>
-            <div>
-              <label className="admin-label">Bio (use blank lines to separate paragraphs)</label>
-              <textarea className="admin-textarea" value={draft.about.bio} onChange={e => update(['about', 'bio'], e.target.value)} style={{ minHeight: '160px' }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              {draft.doctors.map((doc, i) => (
+                <div key={i} style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+                    <span style={{ fontWeight: 700, color: '#374151' }}>{doc.name || `Doctor #${i + 1}`}</span>
+                    {draft.doctors.length > 1 && (
+                      <button onClick={() => update(['doctors'], draft.doctors.filter((_, idx) => idx !== i))} className="admin-btn admin-btn-danger" style={{ padding: '4px 10px', fontSize: '12px' }}>Remove</button>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {([['Doctor Name', 'name'], ['Title / Credentials', 'title'], ['Education', 'education']] as [string, string][]).map(([label, key]) => (
+                      <div key={key}>
+                        <label className="admin-label">{label}</label>
+                        <input className="admin-input" value={String(doc[key as keyof typeof doc])} onChange={e => update(['doctors', String(i), key], e.target.value)} />
+                      </div>
+                    ))}
+                    <div>
+                      <label className="admin-label">Years of Experience</label>
+                      <input className="admin-input" type="number" value={doc.yearsExperience} onChange={e => update(['doctors', String(i), 'yearsExperience'], parseInt(e.target.value) || 0)} style={{ maxWidth: '120px' }} />
+                    </div>
+                    <div>
+                      <label className="admin-label">Bio (blank lines = paragraphs)</label>
+                      <textarea className="admin-textarea" value={doc.bio} onChange={e => update(['doctors', String(i), 'bio'], e.target.value)} style={{ minHeight: '140px' }} />
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}

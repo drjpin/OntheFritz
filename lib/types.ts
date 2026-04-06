@@ -16,13 +16,13 @@ export interface SiteContent {
     title: string
     description: string
   }>
-  about: {
-    doctorName: string
+  doctors: Array<{
+    name: string
     title: string
     bio: string
     yearsExperience: number
     education: string
-  }
+  }>
   testimonials: Array<{
     name: string
     text: string
@@ -109,13 +109,15 @@ export const DEFAULT_CONTENT: SiteContent = {
         'Safe, gentle chiropractic care for children of all ages — from newborns through teenagers.',
     },
   ],
-  about: {
-    doctorName: 'Dr. Alex Rivera',
-    title: 'Doctor of Chiropractic',
-    bio: 'Dr. Rivera has spent over 15 years helping patients find natural, lasting relief from pain. With advanced training in sports medicine and a whole-body approach to wellness, Dr. Rivera takes time to truly understand each patient before treatment begins.\n\nWe believe you deserve to know exactly what is happening with your body and why — so you can make informed decisions about your own care.',
-    yearsExperience: 15,
-    education: 'Palmer College of Chiropractic, Magna Cum Laude',
-  },
+  doctors: [
+    {
+      name: 'Dr. Alex Rivera',
+      title: 'Doctor of Chiropractic',
+      bio: 'Dr. Rivera has spent over 15 years helping patients find natural, lasting relief from pain. With advanced training in sports medicine and a whole-body approach to wellness, Dr. Rivera takes time to truly understand each patient before treatment begins.\n\nWe believe you deserve to know exactly what is happening with your body and why — so you can make informed decisions about your own care.',
+      yearsExperience: 15,
+      education: 'Palmer College of Chiropractic, Magna Cum Laude',
+    },
+  ],
   testimonials: [
     {
       name: 'Sarah M.',
