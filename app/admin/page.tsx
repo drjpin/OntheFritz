@@ -1,30 +1,53 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { DEFAULT_CONTENT, type SiteContent, type Account, type Version } from '@/lib/types'
+import { useState, useEffect, useRef } from 'react'
 
-type AdminView = 'dashboard' | 'content' | 'ai' | 'versions'
-type ContentTab = 'practice' | 'hero' | 'services' | 'about' | 'hours' | 'testimonials' | 'blog' | 'style'
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-interface AiMessage {
-  role: 'user' | 'ai'
-  text: string
+interface Account {
+  id: string
+  email: string
+  plan: 'demo' | 'monthly'
+  status: string
+  actions_used: number
+  actions_limit: number
+  cf_api_token: string | null
+  cf_account_id: string | null
+  cf_project_name: string | null
 }
 
-// ── Helpers ──────────────────────────────────────────────────
-
-function ActionBadge({ used, limit }: { used: number; limit: number }) {
-  const remaining = limit - used
-  const pct = used / limit
-  const cls = pct >= 1 ? 'danger' : pct >= 0.8 ? 'warning' : ''
-  return (
-    <span className={`action-badge ${cls}`}>
-      ⚡ {remaining} action{remaining !== 1 ? 's' : ''} remaining
-    </span>
-  )
+interface SiteFile {
+  path: string
+  content: string
 }
 
-// ── Login ─────────────────────────────────────────────────────
+interface Version {
+  id: string
+  label: string
+  created_at: string
+}
+
+interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+  changedFiles?: string[]
+}
+
+// ─── API helpers ──────────────────────────────────────────────────────────────
+
+function api(path: string, options: RequestInit & { token?: string } = {}) {
+  const { token, headers, ...rest } = options
+  return fetch(path, {
+    ...rest,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { 'x-session-token': token } : {}),
+      ...headers,
+    },
+  })
+}
+
+// ─── Login Screen ─────────────────────────────────────────────────────────────
 
 function LoginScreen({ onLogin }: { onLogin: (token: string, account: Account) => void }) {
   const [email, setEmail] = useState('')
@@ -32,842 +55,618 @@ function LoginScreen({ onLogin }: { onLogin: (token: string, account: Account) =
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  async function handleLogin(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
     setLoading(true)
     try {
-      const res = await fetch('/api/auth', {
+      const res = await api('/api/auth', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'login', email, password }),
       })
       const data = await res.json()
-      if (!res.ok) { setError(data.error || 'Login failed'); return }
-      localStorage.setItem('chiro_admin_token', data.token)
+      if (!res.ok) { setError(data.error ?? 'Login failed'); return }
+      localStorage.setItem('session_token', data.token)
       onLogin(data.token, data.account)
     } catch {
-      setError('Connection error. Please try again.')
+      setError('Network error')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f0f7ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter, system-ui, sans-serif' }}>
-      <div style={{ width: '100%', maxWidth: '400px', padding: '0 24px' }}>
-        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-          <div style={{ fontSize: '28px', fontWeight: 800, color: '#1A5276', marginBottom: '8px' }}>ChiroSite Admin</div>
-          <div style={{ fontSize: '15px', color: '#64748b' }}>Sign in to manage your website</div>
-        </div>
-        <form onSubmit={handleLogin} className="admin-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div>
-            <label className="admin-label">Email address</label>
-            <input className="admin-input" type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="you@example.com" />
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0f172a' }}>
+      <div style={{ background: '#1e293b', borderRadius: 12, padding: '2.5rem', width: '100%', maxWidth: 400, boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#f1f5f9', marginBottom: '0.5rem' }}>ChiroSite AI</h1>
+        <p style={{ color: '#94a3b8', marginBottom: '2rem', fontSize: '0.875rem' }}>Sign in to manage your site</p>
+        {error && (
+          <div style={{ background: '#450a0a', border: '1px solid #dc2626', borderRadius: 8, padding: '0.75rem', marginBottom: '1rem', color: '#fca5a5', fontSize: '0.875rem' }}>
+            {error}
           </div>
-          <div>
-            <label className="admin-label">Password</label>
-            <input className="admin-input" type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="••••••••" />
-          </div>
-          {error && <div style={{ background: '#fef2f2', color: '#dc2626', padding: '10px 14px', borderRadius: '8px', fontSize: '14px' }}>{error}</div>}
-          <button type="submit" className="admin-btn admin-btn-primary" style={{ marginTop: '4px', padding: '12px' }} disabled={loading}>
+        )}
+        <form onSubmit={handleSubmit}>
+          <label style={labelStyle}>Email</label>
+          <input style={inputStyle} type="email" value={email} onChange={e => setEmail(e.target.value)} required autoFocus />
+          <label style={{ ...labelStyle, marginTop: '1rem' }}>Password</label>
+          <input style={inputStyle} type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+          <button style={{ ...btnStyle, width: '100%', marginTop: '1.5rem', background: loading ? '#334155' : '#2563eb', cursor: loading ? 'not-allowed' : 'pointer' }} type="submit" disabled={loading}>
             {loading ? 'Signing in…' : 'Sign In'}
           </button>
         </form>
-        <p style={{ textAlign: 'center', marginTop: '20px', fontSize: '13px', color: '#94a3b8' }}>
-          Need access? Contact your site administrator.
-        </p>
       </div>
     </div>
   )
 }
 
-// ── Sidebar ───────────────────────────────────────────────────
+// ─── Main Admin Panel ─────────────────────────────────────────────────────────
 
-const NAV_ITEMS: { id: AdminView; label: string; icon: string }[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: '▦' },
-  { id: 'content', label: 'Edit Content', icon: '✏' },
-  { id: 'ai', label: 'AI Assistant', icon: '✦' },
-  { id: 'versions', label: 'Version History', icon: '⟳' },
-]
+export default function AdminPage() {
+  const [token, setToken] = useState<string | null>(null)
+  const [account, setAccount] = useState<Account | null>(null)
+  const [tab, setTab] = useState<'ai' | 'files' | 'versions' | 'settings'>('ai')
+  const [initializing, setInitializing] = useState(false)
+  const [siteExists, setSiteExists] = useState(false)
+  const [checkingAuth, setCheckingAuth] = useState(true)
 
-function Sidebar({ view, setView, account, onLogout }: {
-  view: AdminView
-  setView: (v: AdminView) => void
-  account: Account
-  onLogout: () => void
-}) {
-  return (
-    <aside className="admin-sidebar">
-      <div className="admin-sidebar-logo">
-        <div style={{ fontWeight: 800, fontSize: '17px', color: 'white' }}>ChiroSite</div>
-        <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', marginTop: '4px' }}>Admin Panel</div>
-      </div>
-      <nav style={{ padding: '12px 0', flex: 1 }}>
-        {NAV_ITEMS.map(item => (
-          <button key={item.id} onClick={() => setView(item.id)} className={`admin-nav-item ${view === item.id ? 'active' : ''}`}>
-            <span style={{ fontSize: '16px', width: '20px' }}>{item.icon}</span>
-            {item.label}
-          </button>
-        ))}
-      </nav>
-      <div style={{ padding: '16px 20px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-        <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>Logged in as</div>
-        <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.85)', fontWeight: 600, marginBottom: '12px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{account.email}</div>
-        <button onClick={onLogout} className="admin-btn" style={{ width: '100%', background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)', fontSize: '13px' }}>Sign Out</button>
-      </div>
-    </aside>
-  )
-}
+  // Validate stored token on load
+  useEffect(() => {
+    const stored = localStorage.getItem('session_token')
+    if (!stored) { setCheckingAuth(false); return }
+    api('/api/auth', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'validate', token: stored }),
+    }).then(r => r.json()).then(data => {
+      if (data.valid) {
+        setToken(stored)
+        setAccount(data.account)
+      } else {
+        localStorage.removeItem('session_token')
+      }
+    }).finally(() => setCheckingAuth(false))
+  }, [])
 
-// ── Dashboard ─────────────────────────────────────────────────
+  // Check if site has files once logged in
+  useEffect(() => {
+    if (!token) return
+    api('/api/files', { token }).then(r => r.json()).then(data => {
+      setSiteExists((data.files ?? []).length > 0)
+    })
+  }, [token])
 
-function Dashboard({ account, setView }: { account: Account; setView: (v: AdminView) => void }) {
-  const remaining = account.actions_limit - account.actions_used
-  const pct = Math.min(100, (account.actions_used / account.actions_limit) * 100)
-
-  return (
-    <div>
-      <div className="admin-section-title">Dashboard</div>
-      <div className="admin-section-sub">Welcome back! Here&apos;s an overview of your account.</div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '28px' }}>
-        {[
-          { label: 'Plan', value: account.plan === 'demo' ? 'Demo' : 'Monthly', color: '#7c3aed' },
-          { label: 'Status', value: account.status === 'active' ? '● Active' : '○ Inactive', color: account.status === 'active' ? '#16a34a' : '#dc2626' },
-          { label: 'Actions Used', value: `${account.actions_used} / ${account.actions_limit}`, color: '#1A5276' },
-          { label: 'Actions Left', value: `${remaining}`, color: remaining <= 5 ? '#dc2626' : '#16a34a' },
-        ].map(stat => (
-          <div key={stat.label} className="admin-card" style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '13px', color: '#64748b', marginBottom: '8px', fontWeight: 500 }}>{stat.label}</div>
-            <div style={{ fontSize: '24px', fontWeight: 800, color: stat.color }}>{stat.value}</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="admin-card" style={{ marginBottom: '20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-          <span style={{ fontSize: '14px', fontWeight: 600, color: '#374151' }}>AI Action Usage</span>
-          <span style={{ fontSize: '13px', color: '#64748b' }}>{account.actions_used}/{account.actions_limit}</span>
-        </div>
-        <div style={{ background: '#f1f5f9', borderRadius: '999px', height: '10px', overflow: 'hidden' }}>
-          <div style={{ background: pct >= 80 ? '#ef4444' : '#2980B9', height: '100%', width: `${pct}%`, borderRadius: '999px', transition: 'width 0.3s' }} />
-        </div>
-        {account.plan === 'demo' && (
-          <p style={{ marginTop: '12px', fontSize: '13px', color: '#64748b' }}>
-            Demo accounts get {account.actions_limit} total AI actions. Upgrade to a monthly plan for {50} actions per month.
-          </p>
-        )}
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
-        {[
-          { icon: '✏', title: 'Edit Your Content', desc: 'Update text, services, hours, and more.', action: () => setView('content'), btn: 'Edit Content' },
-          { icon: '✦', title: 'AI Assistant', desc: 'Describe a change and let AI handle it for you.', action: () => setView('ai'), btn: 'Open AI Assistant' },
-          { icon: '⟳', title: 'Version History', desc: 'Restore a previous version if something goes wrong.', action: () => setView('versions'), btn: 'View History' },
-        ].map(card => (
-          <div key={card.title} className="admin-card" style={{ display: 'flex', flexDirection: 'column' }}>
-            <div style={{ fontSize: '28px', marginBottom: '12px' }}>{card.icon}</div>
-            <div style={{ fontWeight: 700, fontSize: '16px', color: '#1a202c', marginBottom: '6px' }}>{card.title}</div>
-            <div style={{ fontSize: '14px', color: '#64748b', marginBottom: '20px', flex: 1 }}>{card.desc}</div>
-            <button onClick={card.action} className="admin-btn admin-btn-primary">{card.btn}</button>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ── Content Editor ────────────────────────────────────────────
-
-function ContentEditor({ draft, setDraft, onSaveDraft, onPublish, saving, publishing, liveContent }: {
-  draft: SiteContent
-  setDraft: (c: SiteContent) => void
-  onSaveDraft: () => void
-  onPublish: () => void
-  saving: boolean
-  publishing: boolean
-  liveContent: SiteContent
-}) {
-  const [tab, setTab] = useState<ContentTab>('practice')
-  const [hasChanges, setHasChanges] = useState(false)
-
-  function update(path: string[], value: unknown) {
-    setHasChanges(true)
-    setDraft(updateNested({ ...draft }, path, value))
+  function handleLogin(t: string, a: Account) {
+    setToken(t)
+    setAccount(a)
   }
 
-  function updateNested(obj: Record<string, unknown>, [key, ...rest]: string[], value: unknown): SiteContent {
-    if (rest.length === 0) { obj[key] = value; return obj as unknown as SiteContent }
-    obj[key] = updateNested({ ...(obj[key] as Record<string, unknown>) }, rest, value)
-    return obj as unknown as SiteContent
+  async function handleLogout() {
+    await api('/api/auth', { method: 'POST', body: JSON.stringify({ action: 'logout', token }) })
+    localStorage.removeItem('session_token')
+    setToken(null)
+    setAccount(null)
   }
 
-  const TABS: { id: ContentTab; label: string }[] = [
-    { id: 'practice', label: 'Practice Info' },
-    { id: 'hero', label: 'Hero' },
-    { id: 'services', label: 'Services' },
-    { id: 'about', label: 'Doctors' },
-    { id: 'hours', label: 'Hours' },
-    { id: 'testimonials', label: 'Testimonials' },
-    { id: 'blog', label: 'Blog Posts' },
-    { id: 'style', label: 'Style' },
-  ]
+  async function handleInit() {
+    if (!token) return
+    setInitializing(true)
+    try {
+      const res = await api('/api/init', { method: 'POST', token })
+      if (res.ok) setSiteExists(true)
+    } finally {
+      setInitializing(false)
+    }
+  }
 
-  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+  if (checkingAuth) {
+    return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0f172a', color: '#94a3b8' }}>Loading…</div>
+  }
 
-  function addService() {
-    update(['services'], [...draft.services, { title: 'New Service', description: 'Service description.' }])
-  }
-  function removeService(i: number) {
-    update(['services'], draft.services.filter((_, idx) => idx !== i))
-  }
-  function addTestimonial() {
-    update(['testimonials'], [...draft.testimonials, { name: 'Patient Name', text: 'Testimonial text.', rating: 5 }])
-  }
-  function removeTestimonial(i: number) {
-    update(['testimonials'], draft.testimonials.filter((_, idx) => idx !== i))
-  }
-  function addBlogPost() {
-    const today = new Date().toLocaleDateString('en-US', { month: 'long', day: '2-digit', year: 'numeric' })
-    update(['blog'], [...draft.blog, { title: 'New Blog Post', excerpt: 'Post excerpt here.', date: today, slug: 'new-blog-post' }])
-  }
-  function removeBlogPost(i: number) {
-    update(['blog'], draft.blog.filter((_, idx) => idx !== i))
+  if (!token || !account) {
+    return <LoginScreen onLogin={handleLogin} />
   }
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
-        <div>
-          <div className="admin-section-title">Edit Content</div>
-          <div className="admin-section-sub">Changes are saved as a draft. Preview before publishing.</div>
-        </div>
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          {hasChanges && (
-            <button onClick={onSaveDraft} className="admin-btn admin-btn-secondary" disabled={saving}>
-              {saving ? 'Saving…' : '↓ Save Draft'}
-            </button>
-          )}
-          <a href="/preview" target="_blank" className="admin-btn admin-btn-secondary" style={{ textDecoration: 'none' }}>
-            👁 Preview
-          </a>
-          <button onClick={() => { onPublish(); setHasChanges(false) }} className="admin-btn admin-btn-primary" disabled={publishing}>
-            {publishing ? 'Publishing…' : '🚀 Publish'}
-          </button>
-        </div>
-      </div>
+    <div style={{ minHeight: '100vh', background: '#0f172a', color: '#e2e8f0', display: 'flex', flexDirection: 'column' }}>
+      {/* Header */}
+      <header style={{ background: '#1e293b', borderBottom: '1px solid #334155', padding: '0 1.5rem', display: 'flex', alignItems: 'center', gap: '1rem', height: 56 }}>
+        <span style={{ fontWeight: 700, color: '#f1f5f9', fontSize: '1rem' }}>ChiroSite AI</span>
+        <div style={{ flex: 1 }} />
+        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+          {account.actions_used}/{account.actions_limit} actions · {account.plan}
+        </span>
+        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{account.email}</span>
+        <button onClick={handleLogout} style={{ ...btnStyle, background: 'transparent', color: '#94a3b8', padding: '0.25rem 0.75rem', fontSize: '0.75rem' }}>
+          Sign out
+        </button>
+      </header>
 
-      {/* Tab bar */}
-      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '24px', background: '#f8fafc', padding: '8px', borderRadius: '10px' }}>
-        {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} className={`admin-tab ${tab === t.id ? 'active' : ''}`}>{t.label}</button>
-        ))}
-      </div>
-
-      <div className="admin-card">
-        {/* Practice Info */}
-        {tab === 'practice' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <h3 style={{ fontWeight: 700, fontSize: '16px', color: '#374151', marginBottom: '4px' }}>Practice Information</h3>
-            {([
-              ['Practice Name', ['practice', 'name']],
-              ['Tagline', ['practice', 'tagline']],
-              ['Phone Number', ['practice', 'phone']],
-              ['Email Address', ['practice', 'email']],
-              ['Street Address', ['practice', 'address']],
-              ['City, State, ZIP', ['practice', 'city']],
-            ] as [string, string[]][]).map(([label, path]) => (
-              <div key={label}>
-                <label className="admin-label">{label}</label>
-                <input className="admin-input" value={String(path.reduce((o: unknown, k) => (o as Record<string, unknown>)[k], draft))} onChange={e => update(path, e.target.value)} />
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Hero */}
-        {tab === 'hero' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <h3 style={{ fontWeight: 700, fontSize: '16px', color: '#374151' }}>Hero Section</h3>
-            <div>
-              <label className="admin-label">Main Headline</label>
-              <input className="admin-input" value={draft.hero.headline} onChange={e => update(['hero', 'headline'], e.target.value)} />
-            </div>
-            <div>
-              <label className="admin-label">Subtext</label>
-              <textarea className="admin-textarea" value={draft.hero.subtext} onChange={e => update(['hero', 'subtext'], e.target.value)} />
-            </div>
-            <div>
-              <label className="admin-label">Call-to-Action Button Text</label>
-              <input className="admin-input" value={draft.hero.cta} onChange={e => update(['hero', 'cta'], e.target.value)} />
-            </div>
-          </div>
-        )}
-
-        {/* Services */}
-        {tab === 'services' && (
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h3 style={{ fontWeight: 700, fontSize: '16px', color: '#374151' }}>Services ({draft.services.length})</h3>
-              <button onClick={addService} className="admin-btn admin-btn-secondary">+ Add Service</button>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              {draft.services.map((svc, i) => (
-                <div key={i} style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-                    <span style={{ fontWeight: 600, color: '#374151', fontSize: '14px' }}>Service #{i + 1}</span>
-                    <button onClick={() => removeService(i)} className="admin-btn admin-btn-danger" style={{ padding: '4px 10px', fontSize: '12px' }}>Remove</button>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <div>
-                      <label className="admin-label">Title</label>
-                      <input className="admin-input" value={svc.title} onChange={e => update(['services', String(i), 'title'], e.target.value)} />
-                    </div>
-                    <div>
-                      <label className="admin-label">Description</label>
-                      <textarea className="admin-textarea" value={svc.description} onChange={e => update(['services', String(i), 'description'], e.target.value)} style={{ minHeight: '80px' }} />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* About */}
-        {tab === 'about' && (
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h3 style={{ fontWeight: 700, fontSize: '16px', color: '#374151' }}>Doctors ({draft.doctors.length})</h3>
-              <button onClick={() => update(['doctors'], [...draft.doctors, { name: 'Dr. New Doctor', title: 'Doctor of Chiropractic', bio: 'Bio here.', yearsExperience: 1, education: 'Chiropractic College' }])} className="admin-btn admin-btn-secondary">+ Add Doctor</button>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-              {draft.doctors.map((doc, i) => (
-                <div key={i} style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '20px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-                    <span style={{ fontWeight: 700, color: '#374151' }}>{doc.name || `Doctor #${i + 1}`}</span>
-                    {draft.doctors.length > 1 && (
-                      <button onClick={() => update(['doctors'], draft.doctors.filter((_, idx) => idx !== i))} className="admin-btn admin-btn-danger" style={{ padding: '4px 10px', fontSize: '12px' }}>Remove</button>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    {([['Doctor Name', 'name'], ['Title / Credentials', 'title'], ['Education', 'education']] as [string, string][]).map(([label, key]) => (
-                      <div key={key}>
-                        <label className="admin-label">{label}</label>
-                        <input className="admin-input" value={String(doc[key as keyof typeof doc])} onChange={e => update(['doctors', String(i), key], e.target.value)} />
-                      </div>
-                    ))}
-                    <div>
-                      <label className="admin-label">Years of Experience</label>
-                      <input className="admin-input" type="number" value={doc.yearsExperience} onChange={e => update(['doctors', String(i), 'yearsExperience'], parseInt(e.target.value) || 0)} style={{ maxWidth: '120px' }} />
-                    </div>
-                    <div>
-                      <label className="admin-label">Bio (blank lines = paragraphs)</label>
-                      <textarea className="admin-textarea" value={doc.bio} onChange={e => update(['doctors', String(i), 'bio'], e.target.value)} style={{ minHeight: '140px' }} />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Hours */}
-        {tab === 'hours' && (
-          <div>
-            <h3 style={{ fontWeight: 700, fontSize: '16px', color: '#374151', marginBottom: '20px' }}>Office Hours</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {days.map(day => (
-                <div key={day} style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                  <span style={{ width: '100px', fontSize: '14px', fontWeight: 600, color: '#374151', flexShrink: 0 }}>{day}</span>
-                  <input className="admin-input" value={draft.hours[day] ?? 'Closed'} onChange={e => update(['hours', day], e.target.value)} placeholder="e.g. 9:00 AM – 5:00 PM or Closed" />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Testimonials */}
-        {tab === 'testimonials' && (
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h3 style={{ fontWeight: 700, fontSize: '16px', color: '#374151' }}>Testimonials</h3>
-              <button onClick={addTestimonial} className="admin-btn admin-btn-secondary">+ Add Testimonial</button>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              {draft.testimonials.map((t, i) => (
-                <div key={i} style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-                    <span style={{ fontWeight: 600, color: '#374151', fontSize: '14px' }}>Testimonial #{i + 1}</span>
-                    <button onClick={() => removeTestimonial(i)} className="admin-btn admin-btn-danger" style={{ padding: '4px 10px', fontSize: '12px' }}>Remove</button>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <div>
-                      <label className="admin-label">Patient Name</label>
-                      <input className="admin-input" value={t.name} onChange={e => update(['testimonials', String(i), 'name'], e.target.value)} />
-                    </div>
-                    <div>
-                      <label className="admin-label">Quote</label>
-                      <textarea className="admin-textarea" value={t.text} onChange={e => update(['testimonials', String(i), 'text'], e.target.value)} style={{ minHeight: '80px' }} />
-                    </div>
-                    <div>
-                      <label className="admin-label">Rating (1–5)</label>
-                      <input className="admin-input" type="number" min={1} max={5} value={t.rating} onChange={e => update(['testimonials', String(i), 'rating'], Math.min(5, Math.max(1, parseInt(e.target.value) || 5)))} style={{ maxWidth: '80px' }} />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Blog */}
-        {tab === 'blog' && (
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h3 style={{ fontWeight: 700, fontSize: '16px', color: '#374151' }}>Blog Posts ({draft.blog.length})</h3>
-              <button onClick={addBlogPost} className="admin-btn admin-btn-secondary">+ Add Post</button>
-            </div>
-            {draft.blog.length === 0 && (
-              <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
-                <div style={{ fontSize: '36px', marginBottom: '12px' }}>📝</div>
-                <div style={{ fontWeight: 600, marginBottom: '8px' }}>No blog posts yet</div>
-                <div style={{ fontSize: '14px' }}>Add one manually or use the AI assistant to write a post for you.</div>
-              </div>
-            )}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              {draft.blog.map((post, i) => (
-                <div key={i} style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-                    <span style={{ fontWeight: 600, color: '#374151', fontSize: '14px' }}>Post #{i + 1}</span>
-                    <button onClick={() => removeBlogPost(i)} className="admin-btn admin-btn-danger" style={{ padding: '4px 10px', fontSize: '12px' }}>Remove</button>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <div>
-                      <label className="admin-label">Title</label>
-                      <input className="admin-input" value={post.title} onChange={e => update(['blog', String(i), 'title'], e.target.value)} />
-                    </div>
-                    <div>
-                      <label className="admin-label">Excerpt / Summary</label>
-                      <textarea className="admin-textarea" value={post.excerpt} onChange={e => update(['blog', String(i), 'excerpt'], e.target.value)} style={{ minHeight: '80px' }} />
-                    </div>
-                    <div style={{ display: 'flex', gap: '12px' }}>
-                      <div style={{ flex: 1 }}>
-                        <label className="admin-label">Date</label>
-                        <input className="admin-input" value={post.date} onChange={e => update(['blog', String(i), 'date'], e.target.value)} placeholder="April 1, 2025" />
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <label className="admin-label">Slug (URL)</label>
-                        <input className="admin-input" value={post.slug} onChange={e => update(['blog', String(i), 'slug'], e.target.value.toLowerCase().replace(/\s+/g, '-'))} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Style */}
-        {tab === 'style' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-            <h3 style={{ fontWeight: 700, fontSize: '16px', color: '#374151' }}>Style & Colors</h3>
-            <p style={{ fontSize: '14px', color: '#64748b', background: '#f0f7ff', padding: '12px 16px', borderRadius: '8px' }}>
-              💡 Changes to style affect the entire site. We recommend sticking to deep blues, greens, or teals for a professional medical look.
-            </p>
-            {([
-              ['Primary Color', 'primaryColor', 'Used for headings, nav logo, and dark sections'],
-              ['Accent Color', 'accentColor', 'Used for buttons, links, and highlights'],
-              ['Background Color', 'bgColor', 'Used for alternating section backgrounds'],
-            ] as [string, string, string][]).map(([label, key, hint]) => (
-              <div key={key}>
-                <label className="admin-label">{label}</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <input type="color" value={String(draft.style[key as keyof typeof draft.style])} onChange={e => update(['style', key], e.target.value)}
-                    style={{ width: '52px', height: '40px', padding: '2px', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', background: 'white' }} />
-                  <input className="admin-input" value={String(draft.style[key as keyof typeof draft.style])} onChange={e => update(['style', key], e.target.value)}
-                    style={{ maxWidth: '140px', fontFamily: 'monospace' }} placeholder="#1A5276" />
-                  <span style={{ fontSize: '13px', color: '#94a3b8' }}>{hint}</span>
-                </div>
-              </div>
-            ))}
-            <div style={{ display: 'flex', gap: '12px', marginTop: '8px', flexWrap: 'wrap' }}>
-              {[
-                { label: 'Navy Blue', p: '#1B3A6B', a: '#2563EB', bg: '#EFF6FF' },
-                { label: 'Forest Green', p: '#14532D', a: '#16A34A', bg: '#F0FDF4' },
-                { label: 'Deep Teal', p: '#134E4A', a: '#0D9488', bg: '#F0FDFA' },
-                { label: 'Burgundy', p: '#6B0F1A', a: '#BE123C', bg: '#FFF1F2' },
-              ].map(preset => (
-                <button key={preset.label} onClick={() => update(['style'], { primaryColor: preset.p, accentColor: preset.a, bgColor: preset.bg })}
-                  className="admin-btn admin-btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ display: 'inline-block', width: '14px', height: '14px', borderRadius: '50%', background: preset.p }} />
-                  {preset.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Diff notice */}
-      {hasChanges && (
-        <div style={{ marginTop: '16px', background: '#fefce8', border: '1px solid #fde68a', borderRadius: '8px', padding: '12px 16px', fontSize: '14px', color: '#92400e', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>⚠ You have unsaved changes.</span>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button onClick={() => { setDraft(liveContent); setHasChanges(false) }} className="admin-btn admin-btn-secondary" style={{ fontSize: '13px', padding: '6px 12px' }}>Discard</button>
-            <button onClick={() => { onSaveDraft(); setHasChanges(false) }} className="admin-btn admin-btn-primary" style={{ fontSize: '13px', padding: '6px 12px' }} disabled={saving}>
-              {saving ? 'Saving…' : 'Save Draft'}
+      {/* No site yet */}
+      {!siteExists && (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
+          <div style={{ textAlign: 'center', maxWidth: 480 }}>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.75rem' }}>Ready to build your site?</h2>
+            <p style={{ color: '#94a3b8', marginBottom: '2rem' }}>We'll set up your chiropractic website with a professional template. Then use the AI assistant to customize everything.</p>
+            <button onClick={handleInit} disabled={initializing} style={{ ...btnStyle, background: initializing ? '#334155' : '#2563eb', padding: '0.875rem 2rem', fontSize: '1rem' }}>
+              {initializing ? 'Setting up…' : 'Initialize My Site'}
             </button>
           </div>
         </div>
+      )}
+
+      {/* Tabs */}
+      {siteExists && (
+        <>
+          <nav style={{ background: '#1e293b', borderBottom: '1px solid #334155', display: 'flex', padding: '0 1.5rem', gap: '0.25rem' }}>
+            {(['ai', 'files', 'versions', 'settings'] as const).map(t => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer', padding: '0.875rem 1rem',
+                  fontSize: '0.875rem', fontWeight: 500, color: tab === t ? '#f1f5f9' : '#64748b',
+                  borderBottom: `2px solid ${tab === t ? '#2563eb' : 'transparent'}`,
+                  transition: 'color 0.15s',
+                }}
+              >
+                {t === 'ai' ? 'AI Assistant' : t.charAt(0).toUpperCase() + t.slice(1)}
+              </button>
+            ))}
+          </nav>
+
+          <main style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            {tab === 'ai' && <AITab token={token} account={account} setAccount={setAccount} />}
+            {tab === 'files' && <FilesTab token={token} />}
+            {tab === 'versions' && <VersionsTab token={token} />}
+            {tab === 'settings' && <SettingsTab token={token} account={account} setAccount={setAccount} />}
+          </main>
+        </>
       )}
     </div>
   )
 }
 
-// ── AI Assistant ──────────────────────────────────────────────
+// ─── AI Assistant Tab ─────────────────────────────────────────────────────────
 
-function AIAssistant({ draft, setDraft, account, token, onSaveDraft }: {
-  draft: SiteContent
-  setDraft: (c: SiteContent) => void
-  account: Account
-  token: string
-  onSaveDraft: () => void
-}) {
-  const [messages, setMessages] = useState<AiMessage[]>([
-    { role: 'ai', text: "Hi! I'm your AI site assistant. Tell me what you'd like to change — for example:\n\n• \"Update my hours to close at 5pm on Fridays\"\n• \"Write a blog post about the benefits of regular chiropractic care\"\n• \"Change my hero headline to something more welcoming\"\n• \"Make the site colors navy blue and gold\"" },
+function AITab({ token, account, setAccount }: { token: string; account: Account; setAccount: (a: Account) => void }) {
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    { role: 'assistant', content: 'Hi! I can make any changes to your website — update content, add sections, change colors, improve SEO, write blog posts, and more. What would you like to change?' }
   ])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [actionsLeft, setActionsLeft] = useState(account.actions_limit - account.actions_used)
-  const endRef = useRef<HTMLDivElement>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [publishing, setPublishing] = useState(false)
+  const [publishUrl, setPublishUrl] = useState<string | null>(null)
+  const [publishError, setPublishError] = useState<string | null>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' })
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  async function sendMessage() {
-    if (!input.trim() || loading || actionsLeft <= 0) return
+  // Build preview URL from Supabase storage
+  useEffect(() => {
+    const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/sites/${account.id}/index.html`
+    setPreviewUrl(url)
+  }, [account.id])
+
+  async function handleSend(e: React.FormEvent) {
+    e.preventDefault()
+    if (!input.trim() || loading) return
     const userMsg = input.trim()
     setInput('')
-    setMessages(m => [...m, { role: 'user', text: userMsg }])
+    setMessages(prev => [...prev, { role: 'user', content: userMsg }])
     setLoading(true)
-
     try {
-      const res = await fetch('/api/ai', {
+      const res = await api('/api/ai', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ message: userMsg, content: draft }),
+        token,
+        body: JSON.stringify({ message: userMsg }),
       })
       const data = await res.json()
       if (!res.ok) {
-        setMessages(m => [...m, { role: 'ai', text: `❌ ${data.error}` }])
-        return
+        setMessages(prev => [...prev, { role: 'assistant', content: `❌ ${data.error}` }])
+      } else {
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: `✅ ${data.summary}`,
+          changedFiles: data.changedFiles,
+        }])
+        setAccount({ ...account, actions_used: data.actionsUsed })
       }
-      setDraft(data.content)
-      setActionsLeft(data.actionsRemaining)
-      setMessages(m => [...m, { role: 'ai', text: `✅ ${data.message}\n\nI've updated your draft. Review the changes in the "Edit Content" tab, then preview and publish when you're ready.` }])
-      onSaveDraft()
     } catch {
-      setMessages(m => [...m, { role: 'ai', text: '❌ Connection error. Please try again.' }])
+      setMessages(prev => [...prev, { role: 'assistant', content: '❌ Network error. Please try again.' }])
     } finally {
       setLoading(false)
     }
   }
 
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 180px)', minHeight: '500px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
-        <div>
-          <div className="admin-section-title">AI Assistant</div>
-          <div className="admin-section-sub">Describe any change and AI will update your draft automatically.</div>
-        </div>
-        <ActionBadge used={account.actions_limit - actionsLeft} limit={account.actions_limit} />
-      </div>
-
-      {/* Chat area */}
-      <div className="admin-card" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px', padding: '20px', marginBottom: '12px' }}>
-        {messages.map((msg, i) => (
-          <div key={i} className={msg.role === 'user' ? 'ai-bubble-user' : 'ai-bubble-ai'} style={{ whiteSpace: 'pre-wrap' }}>
-            {msg.text}
-          </div>
-        ))}
-        {loading && (
-          <div className="ai-bubble-ai" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-            <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#94a3b8', animation: 'pulse 1s infinite' }} />
-            <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#94a3b8', animation: 'pulse 1s infinite 0.2s' }} />
-            <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#94a3b8', animation: 'pulse 1s infinite 0.4s' }} />
-          </div>
-        )}
-        <div ref={endRef} />
-      </div>
-
-      {/* Input */}
-      {actionsLeft > 0 ? (
-        <div className="admin-card" style={{ display: 'flex', gap: '12px', padding: '16px' }}>
-          <textarea
-            className="admin-textarea"
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
-            placeholder="Describe a change… (Enter to send, Shift+Enter for new line)"
-            style={{ minHeight: '60px', maxHeight: '120px', resize: 'vertical', flex: 1, marginBottom: 0 }}
-            disabled={loading}
-          />
-          <button onClick={sendMessage} className="admin-btn admin-btn-primary" disabled={loading || !input.trim()} style={{ alignSelf: 'flex-end', whiteSpace: 'nowrap' }}>
-            {loading ? '…' : 'Send ↵'}
-          </button>
-        </div>
-      ) : (
-        <div className="admin-card" style={{ background: '#fef2f2', borderColor: '#fecaca', textAlign: 'center', padding: '20px' }}>
-          <div style={{ fontWeight: 700, color: '#dc2626', marginBottom: '8px' }}>Action limit reached</div>
-          <div style={{ fontSize: '14px', color: '#64748b' }}>
-            {account.plan === 'demo' ? 'Demo accounts get 5 AI actions. Contact us to upgrade.' : 'Your limit resets at the start of next month.'}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── Version History ───────────────────────────────────────────
-
-function VersionHistory({ token, onRestore }: { token: string; onRestore: (content: SiteContent) => void }) {
-  const [versions, setVersions] = useState<Version[]>([])
-  const [loading, setLoading] = useState(true)
-  const [restoring, setRestoring] = useState<string | null>(null)
-  const [success, setSuccess] = useState('')
-
-  useEffect(() => {
-    fetch('/api/versions', { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json())
-      .then(d => setVersions(d.versions || []))
-      .finally(() => setLoading(false))
-  }, [token])
-
-  async function handleRestore(id: string) {
-    if (!confirm('Restore this version? Your current live content will be backed up first.')) return
-    setRestoring(id)
-    try {
-      const res = await fetch('/api/versions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ action: 'restore', id }),
-      })
-      const data = await res.json()
-      if (res.ok) {
-        onRestore(data.content)
-        setSuccess('Version restored successfully!')
-        setTimeout(() => setSuccess(''), 4000)
-        // Refresh list
-        fetch('/api/versions', { headers: { Authorization: `Bearer ${token}` } })
-          .then(r => r.json())
-          .then(d => setVersions(d.versions || []))
-      }
-    } finally {
-      setRestoring(null)
-    }
-  }
-
-  return (
-    <div>
-      <div className="admin-section-title">Version History</div>
-      <div className="admin-section-sub">Versions are saved automatically when you publish. Restore any version in one click.</div>
-
-      {success && (
-        <div style={{ background: '#dcfce7', border: '1px solid #86efac', borderRadius: '8px', padding: '12px 16px', color: '#16a34a', fontWeight: 600, marginBottom: '16px' }}>
-          ✓ {success}
-        </div>
-      )}
-
-      <div className="admin-card">
-        {loading && <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>Loading versions…</div>}
-        {!loading && versions.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
-            <div style={{ fontSize: '36px', marginBottom: '12px' }}>⟳</div>
-            <div style={{ fontWeight: 600, marginBottom: '8px' }}>No versions yet</div>
-            <div style={{ fontSize: '14px' }}>Version snapshots are created automatically when you publish changes.</div>
-          </div>
-        )}
-        {versions.map(v => (
-          <div key={v.id} className="version-item">
-            <div>
-              <div style={{ fontWeight: 600, fontSize: '14px', color: '#374151' }}>{v.label}</div>
-              <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
-                {new Date(v.created_at).toLocaleString()}
-              </div>
-            </div>
-            <button
-              onClick={() => handleRestore(v.id)}
-              className="admin-btn admin-btn-secondary"
-              style={{ fontSize: '13px', padding: '6px 14px' }}
-              disabled={restoring === v.id}
-            >
-              {restoring === v.id ? 'Restoring…' : 'Restore'}
-            </button>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ── Main Admin Panel ──────────────────────────────────────────
-
-export default function AdminPanel() {
-  const [token, setToken] = useState<string | null>(null)
-  const [account, setAccount] = useState<Account | null>(null)
-  const [view, setView] = useState<AdminView>('dashboard')
-  const [liveContent, setLiveContent] = useState<SiteContent>(DEFAULT_CONTENT)
-  const [draftContent, setDraftContent] = useState<SiteContent>(DEFAULT_CONTENT)
-  const [saving, setSaving] = useState(false)
-  const [publishing, setPublishing] = useState(false)
-  const [authLoading, setAuthLoading] = useState(true)
-  const [toast, setToast] = useState('')
-
-  function showToast(msg: string) {
-    setToast(msg)
-    setTimeout(() => setToast(''), 3500)
-  }
-
-  // On mount, try to restore session from localStorage
-  useEffect(() => {
-    const stored = localStorage.getItem('chiro_admin_token')
-    if (!stored) { setAuthLoading(false); return }
-
-    fetch('/api/auth', { headers: { Authorization: `Bearer ${stored}` } })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data?.account) {
-          setToken(stored)
-          setAccount(data.account)
-          loadContent(stored)
-        } else {
-          localStorage.removeItem('chiro_admin_token')
-        }
-      })
-      .finally(() => setAuthLoading(false))
-  }, [])
-
-  function loadContent(t: string) {
-    // Load live content
-    fetch('/api/content', { headers: { Authorization: `Bearer ${t}` } })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data?.content) { setLiveContent(data.content); setDraftContent(data.content) } })
-
-    // Load draft content
-    fetch('/api/content?draft=true', { headers: { Authorization: `Bearer ${t}` } })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data?.content) setDraftContent(data.content) })
-  }
-
-  function handleLogin(t: string, acct: Account) {
-    setToken(t)
-    setAccount(acct)
-    loadContent(t)
-  }
-
-  function handleLogout() {
-    if (token) fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'logout' }) })
-    localStorage.removeItem('chiro_admin_token')
-    setToken(null)
-    setAccount(null)
-    setView('dashboard')
-  }
-
-  const saveDraft = useCallback(async (content?: SiteContent) => {
-    if (!token) return
-    setSaving(true)
-    try {
-      const res = await fetch('/api/content', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ content: content ?? draftContent }),
-      })
-      if (res.ok) showToast('Draft saved.')
-    } finally {
-      setSaving(false)
-    }
-  }, [token, draftContent])
-
-  const publishContent = useCallback(async () => {
-    if (!token) return
+  async function handlePublish() {
     setPublishing(true)
+    setPublishError(null)
     try {
-      const res = await fetch('/api/content?publish', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ content: draftContent }),
-      })
-      if (res.ok) {
-        setLiveContent(draftContent)
-        showToast('🚀 Published! Your site is now live.')
+      const res = await api('/api/publish', { method: 'POST', token })
+      const data = await res.json()
+      if (!res.ok) {
+        setPublishError(data.error)
+      } else {
+        setPublishUrl(data.url)
+        setMessages(prev => [...prev, { role: 'assistant', content: `🚀 Published! Your site is live at ${data.url}` }])
       }
+    } catch {
+      setPublishError('Network error during publish')
     } finally {
       setPublishing(false)
     }
-  }, [token, draftContent])
+  }
 
-  if (authLoading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', fontFamily: 'Inter, system-ui, sans-serif', color: '#64748b' }}>
-      Loading…
-    </div>
-  )
-
-  if (!token || !account) return <LoginScreen onLogin={handleLogin} />
+  const hasCF = account.cf_api_token && account.cf_account_id && account.cf_project_name
 
   return (
-    <div className="admin-layout">
-      <Sidebar view={view} setView={setView} account={account} onLogout={handleLogout} />
-
-      <div className="admin-main">
-        {/* Top bar */}
-        <div className="admin-topbar">
-          <div style={{ fontWeight: 700, fontSize: '15px', color: '#374151' }}>
-            {NAV_ITEMS.find(n => n.id === view)?.label}
-          </div>
-          <ActionBadge used={account.actions_used} limit={account.actions_limit} />
-        </div>
-
-        {/* Content */}
-        <div className="admin-content">
-          {view === 'dashboard' && <Dashboard account={account} setView={setView} />}
-          {view === 'content' && (
-            <ContentEditor
-              draft={draftContent}
-              setDraft={setDraftContent}
-              onSaveDraft={() => saveDraft()}
-              onPublish={publishContent}
-              saving={saving}
-              publishing={publishing}
-              liveContent={liveContent}
-            />
-          )}
-          {view === 'ai' && token && (
-            <AIAssistant
-              draft={draftContent}
-              setDraft={setDraftContent}
-              account={account}
-              token={token}
-              onSaveDraft={() => saveDraft()}
-            />
-          )}
-          {view === 'versions' && token && (
-            <VersionHistory
-              token={token}
-              onRestore={content => { setLiveContent(content); setDraftContent(content); showToast('Version restored!') }}
-            />
-          )}
-        </div>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', maxWidth: 800, width: '100%', margin: '0 auto', padding: '1rem 1.5rem' }}>
+      {/* Action buttons */}
+      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+        <a
+          href={previewUrl ?? '#'}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ ...btnStyle, background: '#0f4c81', textDecoration: 'none', fontSize: '0.875rem' }}
+        >
+          👁 Preview Site
+        </a>
+        {hasCF ? (
+          <button
+            onClick={handlePublish}
+            disabled={publishing}
+            style={{ ...btnStyle, background: publishing ? '#334155' : '#059669', fontSize: '0.875rem' }}
+          >
+            {publishing ? 'Publishing…' : '🚀 Publish to Cloudflare'}
+          </button>
+        ) : (
+          <span style={{ fontSize: '0.75rem', color: '#64748b', alignSelf: 'center' }}>
+            Add Cloudflare credentials in Settings to publish
+          </span>
+        )}
+        {publishUrl && (
+          <a href={publishUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.75rem', color: '#34d399', alignSelf: 'center' }}>
+            ✓ Live: {publishUrl}
+          </a>
+        )}
+        {publishError && <span style={{ fontSize: '0.75rem', color: '#f87171', alignSelf: 'center' }}>❌ {publishError}</span>}
       </div>
 
-      {/* Toast */}
-      {toast && (
-        <div style={{ position: 'fixed', bottom: '24px', right: '24px', background: '#1a202c', color: 'white', padding: '14px 20px', borderRadius: '10px', fontSize: '14px', fontWeight: 600, zIndex: 9999, boxShadow: '0 8px 32px rgba(0,0,0,0.2)', fontFamily: 'Inter, system-ui, sans-serif' }}>
-          {toast}
-        </div>
-      )}
+      {/* Messages */}
+      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem', paddingBottom: '1rem' }}>
+        {messages.map((msg, i) => (
+          <div key={i} style={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
+            <div style={{
+              maxWidth: '80%', padding: '0.75rem 1rem', borderRadius: 12,
+              background: msg.role === 'user' ? '#2563eb' : '#1e293b',
+              color: '#f1f5f9', fontSize: '0.9rem', lineHeight: 1.6,
+            }}>
+              {msg.content}
+              {msg.changedFiles && msg.changedFiles.length > 0 && (
+                <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: '#94a3b8' }}>
+                  Changed: {msg.changedFiles.join(', ')}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+        {loading && (
+          <div style={{ display: 'flex' }}>
+            <div style={{ background: '#1e293b', borderRadius: 12, padding: '0.75rem 1rem', color: '#64748b', fontSize: '0.9rem' }}>
+              Thinking…
+            </div>
+          </div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Input */}
+      <form onSubmit={handleSend} style={{ display: 'flex', gap: '0.75rem' }}>
+        <input
+          style={{ ...inputStyle, flex: 1, background: '#1e293b' }}
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          placeholder="Ask me to change anything on your site…"
+          disabled={loading}
+        />
+        <button
+          type="submit"
+          disabled={loading || !input.trim()}
+          style={{ ...btnStyle, background: loading || !input.trim() ? '#334155' : '#2563eb', padding: '0.75rem 1.25rem' }}
+        >
+          Send
+        </button>
+      </form>
+      <p style={{ fontSize: '0.7rem', color: '#475569', marginTop: '0.5rem', textAlign: 'center' }}>
+        {account.actions_used}/{account.actions_limit} actions used this month
+      </p>
     </div>
   )
+}
+
+// ─── Files Tab ────────────────────────────────────────────────────────────────
+
+function FilesTab({ token }: { token: string }) {
+  const [files, setFiles] = useState<SiteFile[]>([])
+  const [selected, setSelected] = useState<SiteFile | null>(null)
+  const [content, setContent] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saveMsg, setSaveMsg] = useState('')
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    loadFiles()
+  }, [])
+
+  async function loadFiles() {
+    setLoading(true)
+    const res = await api('/api/files', { token })
+    const data = await res.json()
+    setFiles(data.files ?? [])
+    setLoading(false)
+  }
+
+  function selectFile(file: SiteFile) {
+    setSelected(file)
+    setContent(file.content)
+    setSaveMsg('')
+  }
+
+  async function saveFile() {
+    if (!selected) return
+    setSaving(true)
+    setSaveMsg('')
+    const res = await api('/api/files', {
+      method: 'PUT',
+      token,
+      body: JSON.stringify({ path: selected.path, content }),
+    })
+    if (res.ok) {
+      setSaveMsg('Saved!')
+      setFiles(prev => prev.map(f => f.path === selected.path ? { ...f, content } : f))
+    } else {
+      setSaveMsg('Save failed')
+    }
+    setSaving(false)
+  }
+
+  if (loading) return <div style={{ padding: '2rem', color: '#94a3b8' }}>Loading files…</div>
+
+  return (
+    <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+      {/* File list */}
+      <div style={{ width: 200, borderRight: '1px solid #334155', overflowY: 'auto', padding: '1rem' }}>
+        <p style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Files</p>
+        {files.map(f => (
+          <button
+            key={f.path}
+            onClick={() => selectFile(f)}
+            style={{
+              display: 'block', width: '100%', textAlign: 'left', padding: '0.5rem 0.75rem',
+              borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: '0.875rem',
+              background: selected?.path === f.path ? '#2563eb20' : 'transparent',
+              color: selected?.path === f.path ? '#60a5fa' : '#cbd5e1',
+            }}
+          >
+            {f.path}
+          </button>
+        ))}
+      </div>
+
+      {/* Editor */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {selected ? (
+          <>
+            <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #334155', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <span style={{ fontSize: '0.875rem', color: '#94a3b8' }}>{selected.path}</span>
+              <div style={{ flex: 1 }} />
+              {saveMsg && <span style={{ fontSize: '0.75rem', color: saveMsg === 'Saved!' ? '#34d399' : '#f87171' }}>{saveMsg}</span>}
+              <button onClick={saveFile} disabled={saving} style={{ ...btnStyle, background: saving ? '#334155' : '#2563eb', fontSize: '0.8rem', padding: '0.4rem 1rem' }}>
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+            <textarea
+              style={{
+                flex: 1, background: '#0f172a', color: '#e2e8f0', border: 'none', padding: '1rem',
+                fontFamily: 'ui-monospace, monospace', fontSize: '0.8rem', lineHeight: 1.6,
+                resize: 'none', outline: 'none',
+              }}
+              value={content}
+              onChange={e => setContent(e.target.value)}
+              spellCheck={false}
+            />
+          </>
+        ) : (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569' }}>
+            Select a file to edit
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Versions Tab ─────────────────────────────────────────────────────────────
+
+function VersionsTab({ token }: { token: string }) {
+  const [versions, setVersions] = useState<Version[]>([])
+  const [loading, setLoading] = useState(true)
+  const [restoring, setRestoring] = useState<string | null>(null)
+  const [msg, setMsg] = useState('')
+
+  useEffect(() => {
+    loadVersions()
+  }, [])
+
+  async function loadVersions() {
+    setLoading(true)
+    const res = await api('/api/versions', { token })
+    const data = await res.json()
+    setVersions(data.versions ?? [])
+    setLoading(false)
+  }
+
+  async function restore(versionId: string) {
+    if (!confirm('Restore this version? This will overwrite your current site files.')) return
+    setRestoring(versionId)
+    setMsg('')
+    const res = await api('/api/versions', {
+      method: 'POST',
+      token,
+      body: JSON.stringify({ action: 'restore', versionId }),
+    })
+    const data = await res.json()
+    if (res.ok) {
+      setMsg(`✅ Restored: ${data.label}`)
+    } else {
+      setMsg(`❌ ${data.error}`)
+    }
+    setRestoring(null)
+  }
+
+  async function snapshot() {
+    const res = await api('/api/versions', {
+      method: 'POST',
+      token,
+      body: JSON.stringify({ action: 'snapshot' }),
+    })
+    if (res.ok) {
+      setMsg('✅ Snapshot saved')
+      loadVersions()
+    }
+  }
+
+  if (loading) return <div style={{ padding: '2rem', color: '#94a3b8' }}>Loading…</div>
+
+  return (
+    <div style={{ padding: '1.5rem', maxWidth: 700 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+        <h2 style={{ fontSize: '1.1rem', fontWeight: 600 }}>Version History</h2>
+        <div style={{ flex: 1 }} />
+        {msg && <span style={{ fontSize: '0.875rem', color: msg.startsWith('✅') ? '#34d399' : '#f87171' }}>{msg}</span>}
+        <button onClick={snapshot} style={{ ...btnStyle, background: '#334155', fontSize: '0.8rem' }}>
+          Save Snapshot
+        </button>
+      </div>
+
+      {versions.length === 0 && (
+        <p style={{ color: '#64748b' }}>No versions yet. AI changes automatically create versions.</p>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        {versions.map((v, i) => (
+          <div key={v.id} style={{ background: '#1e293b', borderRadius: 8, padding: '1rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <div style={{ flex: 1 }}>
+              <p style={{ fontSize: '0.9rem', color: '#f1f5f9', marginBottom: '0.25rem' }}>{v.label}</p>
+              <p style={{ fontSize: '0.75rem', color: '#64748b' }}>{new Date(v.created_at).toLocaleString()}</p>
+            </div>
+            {i > 0 && (
+              <button
+                onClick={() => restore(v.id)}
+                disabled={restoring === v.id}
+                style={{ ...btnStyle, background: restoring === v.id ? '#334155' : '#92400e', fontSize: '0.8rem' }}
+              >
+                {restoring === v.id ? 'Restoring…' : 'Restore'}
+              </button>
+            )}
+            {i === 0 && <span style={{ fontSize: '0.75rem', color: '#34d399' }}>Current</span>}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── Settings Tab ─────────────────────────────────────────────────────────────
+
+function SettingsTab({ token, account, setAccount }: { token: string; account: Account; setAccount: (a: Account) => void }) {
+  const [cfToken, setCfToken] = useState(account.cf_api_token ?? '')
+  const [cfAccountId, setCfAccountId] = useState(account.cf_account_id ?? '')
+  const [cfProject, setCfProject] = useState(account.cf_project_name ?? '')
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  async function saveCF(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    setMsg('')
+    const res = await api('/api/settings', {
+      method: 'POST',
+      token,
+      body: JSON.stringify({
+        cf_api_token: cfToken,
+        cf_account_id: cfAccountId,
+        cf_project_name: cfProject,
+      }),
+    })
+    const data = await res.json()
+    if (res.ok) {
+      setMsg('✅ Saved!')
+      setAccount({ ...account, cf_api_token: cfToken, cf_account_id: cfAccountId, cf_project_name: cfProject })
+    } else {
+      setMsg(`❌ ${data.error}`)
+    }
+    setSaving(false)
+  }
+
+  return (
+    <div style={{ padding: '1.5rem', maxWidth: 600 }}>
+      <h2 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '1.5rem' }}>Settings</h2>
+
+      {/* Account info */}
+      <div style={{ background: '#1e293b', borderRadius: 8, padding: '1rem', marginBottom: '1.5rem' }}>
+        <p style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Account</p>
+        <p style={{ color: '#f1f5f9', marginBottom: '0.25rem' }}>{account.email}</p>
+        <p style={{ color: '#94a3b8', fontSize: '0.875rem' }}>
+          Plan: <span style={{ color: account.plan === 'monthly' ? '#34d399' : '#f59e0b' }}>{account.plan}</span>
+          {' · '}
+          {account.actions_used}/{account.actions_limit} actions used this month
+        </p>
+      </div>
+
+      {/* Cloudflare */}
+      <div style={{ background: '#1e293b', borderRadius: 8, padding: '1rem' }}>
+        <p style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '1rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cloudflare Pages</p>
+        <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginBottom: '1.25rem', lineHeight: 1.6 }}>
+          Connect your Cloudflare account to publish your site. You need a Cloudflare API token (with Pages:Edit permission), your account ID, and a Pages project name.
+        </p>
+        <form onSubmit={saveCF}>
+          <label style={labelStyle}>API Token</label>
+          <input style={inputStyle} type="password" value={cfToken} onChange={e => setCfToken(e.target.value)} placeholder="CF API token with Pages:Edit" />
+          <label style={{ ...labelStyle, marginTop: '1rem' }}>Account ID</label>
+          <input style={inputStyle} value={cfAccountId} onChange={e => setCfAccountId(e.target.value)} placeholder="Found in Cloudflare dashboard URL" />
+          <label style={{ ...labelStyle, marginTop: '1rem' }}>Pages Project Name</label>
+          <input style={inputStyle} value={cfProject} onChange={e => setCfProject(e.target.value)} placeholder="my-chiro-site" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '1.25rem' }}>
+            <button type="submit" disabled={saving} style={{ ...btnStyle, background: saving ? '#334155' : '#2563eb' }}>
+              {saving ? 'Saving…' : 'Save Cloudflare Settings'}
+            </button>
+            {msg && <span style={{ fontSize: '0.875rem', color: msg.startsWith('✅') ? '#34d399' : '#f87171' }}>{msg}</span>}
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ─── Shared styles ────────────────────────────────────────────────────────────
+
+const inputStyle: React.CSSProperties = {
+  display: 'block', width: '100%', padding: '0.625rem 0.875rem',
+  background: '#0f172a', border: '1px solid #334155', borderRadius: 8,
+  color: '#f1f5f9', fontSize: '0.9rem', outline: 'none',
+}
+
+const labelStyle: React.CSSProperties = {
+  display: 'block', fontSize: '0.8rem', color: '#94a3b8',
+  marginBottom: '0.375rem', fontWeight: 500,
+}
+
+const btnStyle: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+  padding: '0.625rem 1.25rem', borderRadius: 8, border: 'none',
+  cursor: 'pointer', fontSize: '0.875rem', fontWeight: 500,
+  color: '#fff', background: '#2563eb', transition: 'background 0.15s',
 }
