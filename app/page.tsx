@@ -1,296 +1,337 @@
 'use client'
 
-import { useState, useCallback } from 'react'
-import dynamic from 'next/dynamic'
+import { useEffect, useState } from 'react'
+import { DEFAULT_CONTENT, type SiteContent } from '@/lib/types'
 
-const Breakout = dynamic(() => import('@/components/games/Breakout'), { ssr: false })
-const Snake = dynamic(() => import('@/components/games/Snake'), { ssr: false })
-const Tetris = dynamic(() => import('@/components/games/Tetris'), { ssr: false })
-const ArgumentDecider = dynamic(() => import('@/components/decider/ArgumentDecider'), { ssr: false })
-const WorldCams = dynamic(() => import('@/components/webcams/WorldCams'), { ssr: false })
-const LiveChat = dynamic(() => import('@/components/chat/LiveChat'), { ssr: false })
-const Leaderboard = dynamic(() => import('@/components/leaderboard/Leaderboard'), { ssr: false })
-const FloatingChat = dynamic(() => import('@/components/chat/FloatingChat'), { ssr: false })
-const DailyChallenge = dynamic(() => import('@/components/arcade/DailyChallenge'), { ssr: false })
+export default function ChiroSite() {
+  const [content, setContent] = useState<SiteContent>(DEFAULT_CONTENT)
+  const [menuOpen, setMenuOpen] = useState(false)
 
-type Section = 'home' | 'arcade' | 'decider' | 'cams' | 'pit'
-type GameTab = 'breakout' | 'snake' | 'tetris'
-
-const NAV_ITEMS: { id: Section; label: string; emoji: string }[] = [
-  { id: 'home', label: 'HOME', emoji: '📺' },
-  { id: 'arcade', label: 'ARCADE', emoji: '🕹️' },
-  { id: 'decider', label: 'THE DECIDER', emoji: '⚖️' },
-  { id: 'cams', label: 'WORLD CAMS', emoji: '🌍' },
-  { id: 'pit', label: 'THE PIT', emoji: '💬' },
-]
-
-export default function Home() {
-  const [section, setSection] = useState<Section>('home')
-  const [gameTab, setGameTab] = useState<GameTab>('tetris')
-  const [pendingScore, setPendingScore] = useState<{ game: string; score: number } | null>(null)
-
-  const handleScoreSubmit = useCallback((game: string) => (score: number) => {
-    if (score > 0) {
-      setPendingScore({ game, score })
-    }
+  useEffect(() => {
+    fetch('/api/content?key=demo')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.content) setContent(data.content) })
+      .catch(() => {})
   }, [])
 
+  const { practice, hero, services, about, testimonials, hours, blog, style } = content
+  const p = style.primaryColor
+  const a = style.accentColor
+
+  const navLinks = [
+    { label: 'Services', href: '#services' },
+    { label: 'About', href: '#about' },
+    { label: 'Testimonials', href: '#testimonials' },
+    { label: 'Hours', href: '#contact' },
+    ...(blog.length > 0 ? [{ label: 'Blog', href: '#blog' }] : []),
+  ]
+
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {/* Floating Pit chat — hidden on The Pit page since full chat is there */}
-      {section !== 'pit' && <FloatingChat section={section} />}
-      {/* AdSense top banner placeholder */}
-      <div style={{ textAlign: 'center', padding: '8px', background: 'rgba(0,0,0,0.3)', borderBottom: '1px solid var(--border-glow)', minHeight: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        {/* Google AdSense banner goes here */}
-        <span className="vt323" style={{ color: 'rgba(0,255,159,0.15)', fontSize: '14px' }}>ADVERTISEMENT</span>
-      </div>
+    <>
+      <style>{`
+        :root {
+          --primary: ${p};
+          --accent: ${a};
+          --bg: ${style.bgColor};
+        }
+      `}</style>
 
-      {/* Header */}
-      <header style={{ padding: '24px 24px 0', textAlign: 'center' }}>
-        <div style={{ marginBottom: '8px' }}>
-          <span
-            className="glow-pink glitch"
-            data-text="ON THE FRITZ"
-            style={{ fontFamily: 'Press Start 2P', fontSize: 'clamp(20px, 5vw, 40px)', letterSpacing: '6px', cursor: 'default' }}
-          >
-            ON THE FRITZ
-          </span>
-        </div>
-        <p className="vt323" style={{ color: 'rgba(0,255,159,0.6)', fontSize: 'clamp(16px, 3vw, 22px)', letterSpacing: '2px' }}>
-          Your productivity is about to be On The Fritz
-        </p>
-
-        {/* Buy Me a Coffee */}
-        <div style={{ marginTop: '12px' }}>
-          <a
-            href="https://buymeacoffee.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="vt323"
-            style={{
-              color: 'rgba(255,159,0,0.5)',
-              fontSize: '16px',
-              textDecoration: 'none',
-              padding: '4px 10px',
-              border: '1px solid rgba(255,159,0,0.2)',
-              transition: 'all 0.2s',
-              display: 'inline-block',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.color = 'var(--neon-orange)'
-              e.currentTarget.style.borderColor = 'var(--neon-orange)'
-              e.currentTarget.style.boxShadow = '0 0 8px var(--neon-orange)'
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.color = 'rgba(255,159,0,0.5)'
-              e.currentTarget.style.borderColor = 'rgba(255,159,0,0.2)'
-              e.currentTarget.style.boxShadow = 'none'
-            }}
-          >
-            ☕ Buy me a coffee
+      {/* ── NAV ── */}
+      <nav className="site-nav">
+        <div className="site-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', height: '70px' }}>
+          <a href="#" style={{ textDecoration: 'none' }}>
+            <div style={{ fontWeight: 800, fontSize: '20px', color: p, letterSpacing: '-0.5px' }}>
+              {practice.name}
+            </div>
+            <div style={{ fontSize: '11px', color: '#718096', letterSpacing: '1px', marginTop: '1px' }}>
+              {practice.tagline}
+            </div>
           </a>
-        </div>
-      </header>
 
-      {/* Nav */}
-      <nav style={{ padding: '16px 24px', display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap', borderBottom: '1px solid var(--border-glow)' }}>
-        {NAV_ITEMS.map(item => (
-          <button
-            key={item.id}
-            onClick={() => setSection(item.id)}
-            style={{
-              fontFamily: 'Press Start 2P',
-              fontSize: '8px',
-              padding: '10px 14px',
-              border: `1px solid ${section === item.id ? 'var(--neon-green)' : 'transparent'}`,
-              background: section === item.id ? 'rgba(0,255,159,0.08)' : 'transparent',
-              color: section === item.id ? 'var(--neon-green)' : 'rgba(0,255,159,0.5)',
-              cursor: 'pointer',
-              boxShadow: section === item.id ? '0 0 10px rgba(0,255,159,0.3)' : 'none',
-              transition: 'all 0.2s',
-              letterSpacing: '2px',
-            }}
-          >
-            {item.emoji} {item.label}
+          {/* Desktop nav */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }} className="hidden md:flex">
+            {navLinks.map(l => (
+              <a key={l.href} href={l.href} style={{ color: '#475569', fontWeight: 500, fontSize: '15px', textDecoration: 'none', padding: '6px 12px', borderRadius: '6px', transition: 'color 0.15s' }}
+                onMouseEnter={e => (e.currentTarget.style.color = a)}
+                onMouseLeave={e => (e.currentTarget.style.color = '#475569')}
+              >
+                {l.label}
+              </a>
+            ))}
+            <a href={`tel:${practice.phone}`} style={{ color: p, fontWeight: 700, fontSize: '15px', textDecoration: 'none', marginLeft: '8px' }}>
+              {practice.phone}
+            </a>
+            <a href="#contact" className="btn-primary" style={{ marginLeft: '8px', padding: '10px 22px', fontSize: '14px' }}>
+              Book Now
+            </a>
+          </div>
+
+          {/* Mobile hamburger */}
+          <button onClick={() => setMenuOpen(o => !o)} style={{ display: 'none', background: 'none', border: 'none', cursor: 'pointer', padding: '8px' }} className="mobile-menu-btn">
+            <span style={{ display: 'block', width: '24px', height: '2px', background: p, marginBottom: '5px', transition: 'all 0.2s', transform: menuOpen ? 'rotate(45deg) translateY(7px)' : 'none' }} />
+            <span style={{ display: 'block', width: '24px', height: '2px', background: p, marginBottom: '5px', opacity: menuOpen ? 0 : 1 }} />
+            <span style={{ display: 'block', width: '24px', height: '2px', background: p, transition: 'all 0.2s', transform: menuOpen ? 'rotate(-45deg) translateY(-7px)' : 'none' }} />
           </button>
-        ))}
+        </div>
+        {menuOpen && (
+          <div style={{ background: 'white', borderTop: '1px solid #e2e8f0', padding: '16px 24px 20px' }}>
+            {navLinks.map(l => (
+              <a key={l.href} href={l.href} onClick={() => setMenuOpen(false)} style={{ display: 'block', padding: '10px 0', color: '#475569', fontWeight: 500, textDecoration: 'none', borderBottom: '1px solid #f1f5f9' }}>
+                {l.label}
+              </a>
+            ))}
+            <a href={`tel:${practice.phone}`} style={{ display: 'block', padding: '10px 0', color: p, fontWeight: 700, textDecoration: 'none', borderBottom: '1px solid #f1f5f9' }}>{practice.phone}</a>
+            <a href="#contact" className="btn-primary" onClick={() => setMenuOpen(false)} style={{ display: 'block', textAlign: 'center', marginTop: '12px' }}>Book Now</a>
+          </div>
+        )}
       </nav>
 
-      {/* Main content */}
-      <main style={{ flex: 1, padding: '32px 24px', maxWidth: '1100px', margin: '0 auto', width: '100%' }}>
+      {/* ── HERO ── */}
+      <section id="home" style={{ background: `linear-gradient(135deg, ${p} 0%, ${a} 100%)`, color: 'white', padding: '120px 0 100px', position: 'relative', overflow: 'hidden' }}>
+        {/* Decorative circles */}
+        <div style={{ position: 'absolute', top: '-80px', right: '-80px', width: '400px', height: '400px', borderRadius: '50%', background: 'rgba(255,255,255,0.06)', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', bottom: '-60px', left: '10%', width: '300px', height: '300px', borderRadius: '50%', background: 'rgba(255,255,255,0.04)', pointerEvents: 'none' }} />
 
-        {/* ===== HOME ===== */}
-        {section === 'home' && (
-          <div>
-            <div style={{ textAlign: 'center', marginBottom: '48px' }}>
-              <p className="vt323" style={{ fontSize: 'clamp(18px, 3vw, 28px)', color: 'rgba(0,255,159,0.7)', maxWidth: '600px', margin: '0 auto', lineHeight: '1.5' }}>
-                Welcome to the internet&apos;s finest waste of time. Productivity is overrated anyway.
-              </p>
+        <div className="site-container" style={{ position: 'relative', zIndex: 1 }}>
+          <div style={{ maxWidth: '680px' }}>
+            <div style={{ display: 'inline-block', background: 'rgba(255,255,255,0.15)', borderRadius: '20px', padding: '6px 16px', fontSize: '13px', fontWeight: 600, marginBottom: '24px', letterSpacing: '1px' }}>
+              ✓ &nbsp;Accepting New Patients
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-              {[
-                { id: 'arcade' as Section, emoji: '🕹️', title: 'ARCADE', color: 'var(--neon-green)', desc: 'Classic games. Breakout. Snake. Tetris. High scores. Glory.' },
-                { id: 'decider' as Section, emoji: '⚖️', title: 'THE DECIDER', color: 'var(--neon-pink)', desc: 'Submit an argument. Get a ruthless verdict. Settle it forever.' },
-                { id: 'cams' as Section, emoji: '🌍', title: 'WORLD CAMS', color: 'var(--neon-cyan)', desc: 'Peek at live feeds from around the planet. Just vibes.' },
-                { id: 'pit' as Section, emoji: '💬', title: 'THE PIT', color: 'var(--neon-yellow)', desc: 'Live chat. Clears every 24 hours. No receipts.' },
-              ].map(card => (
-                <button
-                  key={card.id}
-                  onClick={() => setSection(card.id)}
-                  className="arcade-card"
-                  style={{
-                    border: `2px solid ${card.color}`,
-                    boxShadow: `0 0 8px ${card.color}30`,
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    transition: 'all 0.2s',
-                    padding: '28px',
-                    width: '100%',
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.boxShadow = `0 0 20px ${card.color}60`
-                    e.currentTarget.style.transform = 'translateY(-2px)'
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.boxShadow = `0 0 8px ${card.color}30`
-                    e.currentTarget.style.transform = 'none'
-                  }}
-                >
-                  <p style={{ fontSize: '32px', marginBottom: '12px' }}>{card.emoji}</p>
-                  <p style={{ fontFamily: 'Press Start 2P', fontSize: '13px', color: card.color, marginBottom: '12px', letterSpacing: '2px' }}>
-                    {card.title}
-                  </p>
-                  <p className="vt323" style={{ color: 'rgba(255,255,255,0.6)', fontSize: '20px', lineHeight: '1.4' }}>
-                    {card.desc}
-                  </p>
-                </button>
-              ))}
-            </div>
-
-            {/* Bottom ad placeholder */}
-            <div style={{ textAlign: 'center', padding: '16px', border: '1px dashed rgba(0,255,159,0.1)', marginTop: '24px', minHeight: '90px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span className="vt323" style={{ color: 'rgba(0,255,159,0.1)', fontSize: '14px' }}>ADVERTISEMENT</span>
-            </div>
-          </div>
-        )}
-
-        {/* ===== ARCADE ===== */}
-        {section === 'arcade' && (
-          <div>
-            <h2 className="section-header glow-green" style={{ borderColor: 'var(--neon-green)' }}>
-              🕹️ ARCADE
-            </h2>
-
-            {/* Game tabs */}
-            <div className="flex gap-3 mb-8 flex-wrap">
-              {(['breakout', 'snake', 'tetris'] as GameTab[]).map(g => (
-                <button
-                  key={g}
-                  onClick={() => setGameTab(g)}
-                  style={{
-                    fontFamily: 'Press Start 2P',
-                    fontSize: '9px',
-                    padding: '10px 16px',
-                    border: `2px solid ${gameTab === g ? 'var(--neon-green)' : 'var(--border-glow)'}`,
-                    background: gameTab === g ? 'rgba(0,255,159,0.1)' : 'transparent',
-                    color: gameTab === g ? 'var(--neon-green)' : 'rgba(0,255,159,0.4)',
-                    cursor: 'pointer',
-                    boxShadow: gameTab === g ? '0 0 12px rgba(0,255,159,0.4)' : 'none',
-                    letterSpacing: '2px',
-                  }}
-                >
-                  {g.toUpperCase()}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex flex-col lg:flex-row gap-8 items-start">
-              {/* Game area */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                {gameTab === 'breakout' && (
-                  <Breakout onScoreSubmit={handleScoreSubmit('breakout')} />
-                )}
-                {gameTab === 'snake' && (
-                  <Snake onScoreSubmit={handleScoreSubmit('snake')} />
-                )}
-                {gameTab === 'tetris' && (
-                  <Tetris onScoreSubmit={handleScoreSubmit('tetris')} />
-                )}
-              </div>
-
-              {/* Leaderboard + Daily sidebar */}
-              <div style={{ flexShrink: 0 }}>
-                <Leaderboard
-                  activeGame={gameTab}
-                  pendingScore={pendingScore?.game === gameTab ? pendingScore : null}
-                  onScoreSubmitted={() => setPendingScore(null)}
-                />
-                <DailyChallenge game={gameTab} />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ===== DECIDER ===== */}
-        {section === 'decider' && (
-          <div>
-            <h2 className="section-header glow-pink" style={{ borderColor: 'var(--neon-pink)' }}>
-              ⚖️ THE DECIDER
-            </h2>
-            <p className="vt323 mb-8 text-center" style={{ color: 'rgba(255,0,110,0.6)', fontSize: '22px' }}>
-              Can&apos;t settle an argument? Let the AI decide. It will not be kind.
+            <h1 style={{ fontSize: 'clamp(36px, 5vw, 60px)', fontWeight: 800, lineHeight: 1.1, marginBottom: '24px', letterSpacing: '-1px' }}>
+              {hero.headline}
+            </h1>
+            <p style={{ fontSize: '20px', lineHeight: 1.7, opacity: 0.9, marginBottom: '40px', maxWidth: '560px' }}>
+              {hero.subtext}
             </p>
-
-            {/* Ad slot */}
-            <div style={{ textAlign: 'center', marginBottom: '24px', minHeight: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed rgba(255,0,110,0.1)' }}>
-              <span className="vt323" style={{ color: 'rgba(255,0,110,0.1)', fontSize: '14px' }}>ADVERTISEMENT</span>
+            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+              <a href="#contact" style={{ background: 'white', color: p, fontWeight: 700, fontSize: '16px', padding: '16px 32px', borderRadius: '6px', textDecoration: 'none', transition: 'all 0.2s', display: 'inline-block', boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 28px rgba(0,0,0,0.2)' }}
+                onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.15)' }}
+              >
+                {hero.cta}
+              </a>
+              <a href="#services" className="btn-outline">See Our Services</a>
             </div>
-
-            <ArgumentDecider />
           </div>
-        )}
-
-        {/* ===== WORLD CAMS ===== */}
-        {section === 'cams' && (
-          <div>
-            <h2 className="section-header glow-cyan" style={{ borderColor: 'var(--neon-cyan)' }}>
-              🌍 WORLD CAMS
-            </h2>
-            <p className="vt323 mb-8 text-center" style={{ color: 'rgba(0,255,255,0.6)', fontSize: '22px' }}>
-              Live feeds from around the planet. You&apos;re everywhere at once.
-            </p>
-            <WorldCams />
-          </div>
-        )}
-
-        {/* ===== THE PIT ===== */}
-        {section === 'pit' && (
-          <div>
-            <h2 className="section-header glow-yellow" style={{ borderColor: 'var(--neon-yellow)' }}>
-              💬 THE PIT
-            </h2>
-            <p className="vt323 mb-8 text-center" style={{ color: 'rgba(255,255,0,0.6)', fontSize: '22px' }}>
-              Say what&apos;s on your mind. It disappears in 24 hours. No receipts.
-            </p>
-            <LiveChat />
-          </div>
-        )}
-      </main>
-
-      {/* Footer */}
-      <footer style={{ padding: '24px', borderTop: '1px solid var(--border-glow)', textAlign: 'center' }}>
-        {/* Footer ad */}
-        <div style={{ minHeight: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', border: '1px dashed rgba(0,255,159,0.08)' }}>
-          <span className="vt323" style={{ color: 'rgba(0,255,159,0.1)', fontSize: '14px' }}>ADVERTISEMENT</span>
         </div>
-        <p className="vt323" style={{ color: 'rgba(0,255,159,0.3)', fontSize: '16px', marginBottom: '8px' }}>
-          onthefritz.us — wasting your time since 2025
-        </p>
-        <p className="vt323" style={{ color: 'rgba(0,255,159,0.15)', fontSize: '14px' }}>
-          Made with ☕ and zero productivity
-        </p>
+      </section>
+
+      {/* ── TRUST BAR ── */}
+      <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0' }}>
+        <div className="site-container">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '48px', padding: '28px 24px', flexWrap: 'wrap' }}>
+            {[
+              { icon: '⭐', text: '5-Star Rated on Google' },
+              { icon: '📅', text: 'Same-Week Appointments' },
+              { icon: '🏥', text: `${about.yearsExperience}+ Years of Experience` },
+              { icon: '👨‍👩‍👧', text: 'All Ages Welcome' },
+            ].map(item => (
+              <div key={item.text} style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#475569', fontSize: '15px', fontWeight: 500 }}>
+                <span style={{ fontSize: '20px' }}>{item.icon}</span>
+                {item.text}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── SERVICES ── */}
+      <section id="services" className="site-section">
+        <div className="site-container">
+          <div style={{ textAlign: 'center', marginBottom: '64px' }}>
+            <div className="section-label">What We Treat</div>
+            <h2 className="section-heading" style={{ marginBottom: '16px' }}>Comprehensive Chiropractic Care</h2>
+            <p className="section-sub" style={{ margin: '0 auto' }}>
+              We treat the root cause of your pain — not just the symptoms. Every plan is tailored to you.
+            </p>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
+            {services.map((svc, i) => (
+              <div key={i} className="service-card">
+                <div className="service-icon">
+                  <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <h3 style={{ fontWeight: 700, fontSize: '18px', color: p, marginBottom: '10px' }}>{svc.title}</h3>
+                <p style={{ color: '#64748b', fontSize: '15px', lineHeight: 1.6 }}>{svc.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── ABOUT ── */}
+      <section id="about" className="site-section-alt">
+        <div className="site-container">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '64px', alignItems: 'center' }}>
+            {/* Photo placeholder */}
+            <div style={{ borderRadius: '16px', overflow: 'hidden', background: `linear-gradient(135deg, ${p}22 0%, ${a}33 100%)`, border: `2px solid ${a}33`, aspectRatio: '4/5', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px' }}>
+              <div style={{ width: '120px', height: '120px', borderRadius: '50%', background: `${a}33`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <svg width="64" height="64" fill="none" stroke={a} strokeWidth="1.5" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              </div>
+              <div style={{ textAlign: 'center', color: a, fontWeight: 600, fontSize: '14px', opacity: 0.7 }}>Doctor Photo Here</div>
+            </div>
+
+            {/* Text */}
+            <div>
+              <div className="section-label">Meet Your Doctor</div>
+              <h2 className="section-heading">{about.doctorName}</h2>
+              <div style={{ color: a, fontWeight: 600, fontSize: '16px', marginBottom: '24px' }}>{about.title}</div>
+              {about.bio.split('\n\n').map((para, i) => (
+                <p key={i} style={{ color: '#475569', fontSize: '16px', lineHeight: 1.8, marginBottom: '16px' }}>{para}</p>
+              ))}
+              <div style={{ display: 'flex', gap: '32px', marginTop: '32px', flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontSize: '36px', fontWeight: 800, color: p }}>{about.yearsExperience}+</div>
+                  <div style={{ fontSize: '14px', color: '#64748b', fontWeight: 500 }}>Years Experience</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '14px', color: '#64748b', fontWeight: 500, marginTop: '8px' }}>Education</div>
+                  <div style={{ fontSize: '15px', fontWeight: 600, color: p }}>{about.education}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── TESTIMONIALS ── */}
+      <section id="testimonials" className="site-section">
+        <div className="site-container">
+          <div style={{ textAlign: 'center', marginBottom: '64px' }}>
+            <div className="section-label">Patient Stories</div>
+            <h2 className="section-heading">Real Results, Real People</h2>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
+            {testimonials.map((t, i) => (
+              <div key={i} className="testimonial-card">
+                <div style={{ marginBottom: '16px' }}>
+                  {'★'.repeat(t.rating).split('').map((s, j) => (
+                    <span key={j} className="star">{s}</span>
+                  ))}
+                </div>
+                <p style={{ fontSize: '16px', lineHeight: 1.7, color: '#374151', fontStyle: 'italic', marginBottom: '20px' }}>
+                  &ldquo;{t.text}&rdquo;
+                </p>
+                <div style={{ fontWeight: 700, color: p, fontSize: '15px' }}>— {t.name}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── HOURS + CONTACT ── */}
+      <section id="contact" className="site-section-dark">
+        <div className="site-container">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '64px' }}>
+            {/* Hours */}
+            <div>
+              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', fontWeight: 700, letterSpacing: '3px', textTransform: 'uppercase', marginBottom: '12px' }}>Office Hours</div>
+              <h2 className="section-heading-light" style={{ marginBottom: '32px' }}>We&apos;re Here When You Need Us</h2>
+              <table className="hours-table">
+                <tbody>
+                  {Object.entries(hours).map(([day, time]) => (
+                    <tr key={day}>
+                      <td style={{ color: 'rgba(255,255,255,0.75)', fontWeight: 500 }}>{day}</td>
+                      <td style={{ color: time === 'Closed' ? 'rgba(255,255,255,0.4)' : 'white' }}>{time}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Contact */}
+            <div>
+              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', fontWeight: 700, letterSpacing: '3px', textTransform: 'uppercase', marginBottom: '12px' }}>Get In Touch</div>
+              <h2 className="section-heading-light" style={{ marginBottom: '32px' }}>Book Your Free Consultation</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '36px' }}>
+                {[
+                  { icon: '📞', label: 'Phone', value: practice.phone, href: `tel:${practice.phone}` },
+                  { icon: '✉️', label: 'Email', value: practice.email, href: `mailto:${practice.email}` },
+                  { icon: '📍', label: 'Address', value: `${practice.address}, ${practice.city}`, href: '#' },
+                ].map(item => (
+                  <div key={item.label} style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
+                    <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>
+                      {item.icon}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '2px' }}>{item.label}</div>
+                      <a href={item.href} style={{ color: 'white', fontSize: '16px', fontWeight: 600, textDecoration: 'none' }}>{item.value}</a>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <a href={`tel:${practice.phone}`} style={{ display: 'inline-block', background: 'white', color: p, fontWeight: 700, fontSize: '16px', padding: '16px 32px', borderRadius: '6px', textDecoration: 'none', transition: 'all 0.2s' }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.2)' }}
+                onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none' }}
+              >
+                Call to Schedule →
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── BLOG (conditional) ── */}
+      {blog.length > 0 && (
+        <section id="blog" className="site-section-alt">
+          <div className="site-container">
+            <div style={{ textAlign: 'center', marginBottom: '64px' }}>
+              <div className="section-label">Health Tips</div>
+              <h2 className="section-heading">From Our Blog</h2>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
+              {blog.map((post, i) => (
+                <div key={i} className="blog-card">
+                  <div style={{ background: `linear-gradient(135deg, ${p}22, ${a}33)`, height: '160px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <svg width="48" height="48" fill="none" stroke={a} strokeWidth="1.5" viewBox="0 0 24 24" opacity="0.6">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                  <div style={{ padding: '24px' }}>
+                    <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '8px' }}>{post.date}</div>
+                    <h3 style={{ fontWeight: 700, fontSize: '18px', color: p, marginBottom: '10px', lineHeight: 1.3 }}>{post.title}</h3>
+                    <p style={{ color: '#64748b', fontSize: '15px', lineHeight: 1.6 }}>{post.excerpt}</p>
+                    <div style={{ marginTop: '16px', color: a, fontWeight: 600, fontSize: '14px', cursor: 'pointer' }}>Read more →</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ── FOOTER ── */}
+      <footer style={{ background: '#0f1923', color: 'rgba(255,255,255,0.6)', padding: '48px 0 32px' }}>
+        <div className="site-container">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '32px', marginBottom: '40px' }}>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: '20px', color: 'white', marginBottom: '8px' }}>{practice.name}</div>
+              <div style={{ fontSize: '14px', lineHeight: 1.6 }}>
+                {practice.address}<br />{practice.city}<br />{practice.phone}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, color: 'white', marginBottom: '12px', fontSize: '14px', letterSpacing: '1px', textTransform: 'uppercase' }}>Quick Links</div>
+              {navLinks.map(l => (
+                <a key={l.href} href={l.href} style={{ display: 'block', color: 'rgba(255,255,255,0.6)', textDecoration: 'none', fontSize: '14px', marginBottom: '8px', transition: 'color 0.15s' }}
+                  onMouseEnter={e => (e.currentTarget.style.color = 'white')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.6)')}
+                >
+                  {l.label}
+                </a>
+              ))}
+            </div>
+          </div>
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '24px', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ fontSize: '13px' }}>© {new Date().getFullYear()} {practice.name}. All rights reserved.</div>
+            <div style={{ fontSize: '12px', opacity: 0.4 }}>Powered by ChiroSite</div>
+          </div>
+        </div>
       </footer>
-    </div>
+    </>
   )
 }

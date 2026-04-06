@@ -1,27 +1,24 @@
-import type { Metadata } from "next";
-import "./globals.css";
+import type { Metadata } from 'next'
+import './globals.css'
 
 export const metadata: Metadata = {
-  title: "On The Fritz | Your productivity is about to be On The Fritz",
-  description: "Vintage arcade games, AI argument decider, world webcams, live chat and more. Your productivity is about to be On The Fritz.",
-  keywords: "arcade games, time wasting, fun, breakout, snake, AI argument decider, webcams",
-  openGraph: {
-    title: "On The Fritz",
-    description: "Your productivity is about to be On The Fritz",
-    url: "https://onthefritz.us",
-    siteName: "On The Fritz",
-    type: "website",
-  },
-};
+  title: 'Sunrise Chiropractic | Feel Better. Move Better. Live Better.',
+  description:
+    'Expert, compassionate chiropractic care for the whole family. Accepting new patients — same-week appointments available.',
+}
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <body>{children}</body>
     </html>
-  );
+  )
 }
