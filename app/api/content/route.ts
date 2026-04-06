@@ -71,13 +71,13 @@ export async function PUT(req: NextRequest) {
   if (publish) {
     // Save a version snapshot first
     const { data: currentLive } = await sb.from('site_content').select('content').eq('account_id', account.id).eq('is_live', true).single()
-    if (currentLive?.content) {
-      await sb.from('versions').insert({
-        account_id: account.id,
-        content: currentLive.content,
-        label: `Backup — ${new Date().toLocaleString()}`,
-      })
-    }
+    await sb.from('versions').insert({
+      account_id: account.id,
+      content: currentLive?.content ?? content,
+      label: currentLive?.content
+        ? `Backup — ${new Date().toLocaleString()}`
+        : `Initial version — ${new Date().toLocaleString()}`,
+    })
     // Upsert live
     await sb.from('site_content').delete().eq('account_id', account.id).eq('is_live', true)
     await sb.from('site_content').insert({ account_id: account.id, content, is_live: true, is_draft: false })
