@@ -2,6 +2,24 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createHash } from 'crypto'
 import { getAccountFromToken, readSiteFiles } from '@/lib/supabase'
 
+// GET /api/publish — list Cloudflare Pages projects (diagnostic)
+export async function GET(req: NextRequest) {
+  const token = req.headers.get('x-session-token') ?? ''
+  const account = await getAccountFromToken(token)
+  if (!account) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  if (!account.cf_api_token || !account.cf_account_id) {
+    return NextResponse.json({ error: 'Cloudflare not configured' }, { status: 400 })
+  }
+
+  const res = await fetch(
+    `https://api.cloudflare.com/client/v4/accounts/${account.cf_account_id}/pages/projects`,
+    { headers: { Authorization: `Bearer ${account.cf_api_token}` } }
+  )
+  const data = await res.json()
+  return NextResponse.json(data)
+}
+
 // POST /api/publish — deploy site to Cloudflare Pages via Direct Upload API
 export async function POST(req: NextRequest) {
   const token = req.headers.get('x-session-token') ?? ''
