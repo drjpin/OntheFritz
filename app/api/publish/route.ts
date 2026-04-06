@@ -45,11 +45,14 @@ export async function POST(req: NextRequest) {
   const manifest: Record<string, string> = {}
 
   for (const file of files) {
-    const hash = createHash('sha256').update(file.content).digest('hex')
+    // Use Buffer for consistent UTF-8 encoding between hash and upload
+    const buffer = Buffer.from(file.content, 'utf-8')
+    console.log(`Publishing ${file.path}: ${buffer.length} bytes`)
+    const hash = createHash('sha256').update(buffer).digest('hex')
     manifest[`/${file.path}`] = hash
     formData.append(
       hash,
-      new Blob([file.content], { type: getContentType(file.path) }),
+      new Blob([buffer], { type: getContentType(file.path) }),
       file.path
     )
   }
