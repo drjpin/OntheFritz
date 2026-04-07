@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
   for (const file of files) {
     const buffer = Buffer.from(file.content, 'utf-8')
     const hash = createHash('sha256').update(buffer).digest('hex')
-    manifest[`/${file.path}`] = hash
+    manifest[file.path] = hash
     uploadPayload.push({
       key: hash,
       value: buffer.toString('base64'),
