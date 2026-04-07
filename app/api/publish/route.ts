@@ -96,6 +96,7 @@ export async function POST(req: NextRequest) {
   console.log('Manifest:', JSON.stringify(manifest))
   const formData = new FormData()
   formData.append('manifest', JSON.stringify(manifest))
+  formData.append('branch', 'main')
 
   const deployRes = await fetch(
     `${CF_BASE}/accounts/${accountId}/pages/projects/${projectName}/deployments`,
@@ -105,12 +106,13 @@ export async function POST(req: NextRequest) {
       body: formData,
     }
   )
+  const deployBody = await deployRes.text()
+  console.log('Deploy response:', deployRes.status, deployBody.slice(0, 500))
   if (!deployRes.ok) {
-    const err = await deployRes.text()
-    return NextResponse.json({ error: `Failed to create deployment: ${err}` }, { status: 500 })
+    return NextResponse.json({ error: `Failed to create deployment: ${deployBody}` }, { status: 500 })
   }
 
-  const { result } = await deployRes.json()
+  const { result } = JSON.parse(deployBody)
   return NextResponse.json({
     ok: true,
     deploymentId: result?.id,
