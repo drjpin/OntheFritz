@@ -1,26 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createHash, randomBytes } from 'crypto'
+import { createHash } from 'crypto'
 import { getAccountFromToken, readSiteFiles } from '@/lib/supabase'
 
-// GET /api/publish — list Cloudflare Pages projects (diagnostic)
+const CF_BASE = 'https://api.cloudflare.com/client/v4'
+
+// GET /api/publish — diagnostic: list Cloudflare Pages projects
 export async function GET(req: NextRequest) {
   const token = req.headers.get('x-session-token') ?? ''
   const account = await getAccountFromToken(token)
   if (!account) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
   if (!account.cf_api_token || !account.cf_account_id) {
     return NextResponse.json({ error: 'Cloudflare not configured' }, { status: 400 })
   }
-
   const res = await fetch(
-    `https://api.cloudflare.com/client/v4/accounts/${account.cf_account_id}/pages/projects`,
+    `${CF_BASE}/accounts/${account.cf_account_id}/pages/projects`,
     { headers: { Authorization: `Bearer ${account.cf_api_token}` } }
   )
-  const data = await res.json()
-  return NextResponse.json(data)
+  return NextResponse.json(await res.json())
 }
 
-// POST /api/publish — deploy site to Cloudflare Pages via Direct Upload API
+// POST /api/publish — deploy to Cloudflare Pages via Direct Upload API
 export async function POST(req: NextRequest) {
   const token = req.headers.get('x-session-token') ?? ''
   const account = await getAccountFromToken(token)
@@ -38,63 +37,76 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No site files to publish' }, { status: 400 })
   }
 
-  const CF_API = `https://api.cloudflare.com/client/v4/accounts/${account.cf_account_id}/pages/projects/${account.cf_project_name}/deployments`
+  const accountId = account.cf_account_id
+  const projectName = account.cf_project_name
+  const apiToken = account.cf_api_token
 
-  // Manually build multipart body to avoid Node.js FormData/Blob serialization issues
-  const boundary = '----CFBoundary' + randomBytes(16).toString('hex')
+  // ── Step 1: Get upload JWT ────────────────────────────────────────────────
+  const jwtRes = await fetch(
+    `${CF_BASE}/accounts/${accountId}/pages/projects/${projectName}/upload-token`,
+    { headers: { Authorization: `Bearer ${apiToken}` } }
+  )
+  if (!jwtRes.ok) {
+    const err = await jwtRes.text()
+    return NextResponse.json({ error: `Failed to get upload token: ${err}` }, { status: 500 })
+  }
+  const { result: jwtResult } = await jwtRes.json()
+  const jwt = jwtResult?.jwt
+  if (!jwt) {
+    return NextResponse.json({ error: 'No JWT returned from upload-token endpoint' }, { status: 500 })
+  }
+
+  // ── Step 2: Upload file assets as base64 JSON ─────────────────────────────
   const manifest: Record<string, string> = {}
-  const parts: Buffer[] = []
+  const uploadPayload: Array<{ key: string; value: string; metadata: { contentType: string }; base64: boolean }> = []
 
   for (const file of files) {
     const buffer = Buffer.from(file.content, 'utf-8')
     const hash = createHash('sha256').update(buffer).digest('hex')
     manifest[`/${file.path}`] = hash
-
-    parts.push(Buffer.from(
-      `--${boundary}\r\n` +
-      `Content-Disposition: form-data; name="${hash}"; filename="${file.path}"\r\n` +
-      `Content-Type: ${getContentType(file.path)}\r\n\r\n`
-    ))
-    parts.push(buffer)
-    parts.push(Buffer.from('\r\n'))
+    uploadPayload.push({
+      key: hash,
+      value: buffer.toString('base64'),
+      metadata: { contentType: getContentType(file.path) },
+      base64: true,
+    })
   }
 
-  // Add manifest field
-  const manifestJson = JSON.stringify(manifest)
-  parts.push(Buffer.from(
-    `--${boundary}\r\n` +
-    `Content-Disposition: form-data; name="manifest"\r\n` +
-    `Content-Type: application/json\r\n\r\n` +
-    manifestJson + '\r\n'
-  ))
-  parts.push(Buffer.from(`--${boundary}--\r\n`))
-
-  const body = Buffer.concat(parts)
-
-  const res = await fetch(CF_API, {
+  const uploadRes = await fetch(`${CF_BASE}/pages/assets/upload`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${account.cf_api_token}`,
-      'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      Authorization: `Bearer ${jwt}`,
+      'Content-Type': 'application/json',
     },
-    body,
+    body: JSON.stringify(uploadPayload),
   })
-
-  if (!res.ok) {
-    const err = await res.text()
-    console.error('CF publish error:', err)
-    return NextResponse.json(
-      { error: `Cloudflare error: ${err}` },
-      { status: 500 }
-    )
+  if (!uploadRes.ok) {
+    const err = await uploadRes.text()
+    return NextResponse.json({ error: `Failed to upload assets: ${err}` }, { status: 500 })
   }
 
-  const { result } = await res.json()
+  // ── Step 3: Create deployment with manifest ───────────────────────────────
+  const formData = new FormData()
+  formData.append('manifest', JSON.stringify(manifest))
 
+  const deployRes = await fetch(
+    `${CF_BASE}/accounts/${accountId}/pages/projects/${projectName}/deployments`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiToken}` },
+      body: formData,
+    }
+  )
+  if (!deployRes.ok) {
+    const err = await deployRes.text()
+    return NextResponse.json({ error: `Failed to create deployment: ${err}` }, { status: 500 })
+  }
+
+  const { result } = await deployRes.json()
   return NextResponse.json({
     ok: true,
     deploymentId: result?.id,
-    url: `https://${account.cf_project_name}.pages.dev`,
+    url: `https://${projectName}.pages.dev`,
   })
 }
 
