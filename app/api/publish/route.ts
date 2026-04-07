@@ -72,6 +72,12 @@ export async function POST(req: NextRequest) {
     })
   }
 
+  console.log('Upload payload:', JSON.stringify(uploadPayload.map(f => ({
+    key: f.key,
+    bytes: f.value.length,
+    contentType: f.metadata.contentType,
+  }))))
+
   const uploadRes = await fetch(`${CF_BASE}/pages/assets/upload`, {
     method: 'POST',
     headers: {
@@ -80,12 +86,14 @@ export async function POST(req: NextRequest) {
     },
     body: JSON.stringify(uploadPayload),
   })
+  const uploadBody = await uploadRes.text()
+  console.log('Upload response:', uploadRes.status, uploadBody)
   if (!uploadRes.ok) {
-    const err = await uploadRes.text()
-    return NextResponse.json({ error: `Failed to upload assets: ${err}` }, { status: 500 })
+    return NextResponse.json({ error: `Failed to upload assets: ${uploadBody}` }, { status: 500 })
   }
 
   // ── Step 3: Create deployment with manifest ───────────────────────────────
+  console.log('Manifest:', JSON.stringify(manifest))
   const formData = new FormData()
   formData.append('manifest', JSON.stringify(manifest))
 
