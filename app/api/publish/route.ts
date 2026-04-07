@@ -107,16 +107,19 @@ export async function POST(req: NextRequest) {
     }
   )
   const deployBody = await deployRes.text()
-  console.log('Deploy response:', deployRes.status, deployBody.slice(0, 500))
   if (!deployRes.ok) {
     return NextResponse.json({ error: `Failed to create deployment: ${deployBody}` }, { status: 500 })
   }
 
-  const { result } = JSON.parse(deployBody)
+  const deployJson = JSON.parse(deployBody)
+  const result = deployJson.result
   return NextResponse.json({
     ok: true,
     deploymentId: result?.id,
-    url: `https://${projectName}.pages.dev`,
+    deploymentUrl: result?.url,
+    productionUrl: `https://${projectName}.pages.dev`,
+    environment: result?.environment,
+    cfResponse: deployJson,
   })
 }
 
