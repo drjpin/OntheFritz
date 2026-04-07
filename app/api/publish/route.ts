@@ -60,8 +60,11 @@ export async function POST(req: NextRequest) {
   const manifest: Record<string, string> = {}
   const uploadPayload: Array<{ key: string; value: string; metadata: { contentType: string }; base64: boolean }> = []
 
+  const debugFiles: Record<string, { rawBytes: number; first100: string }> = {}
+
   for (const file of files) {
     const buffer = Buffer.from(file.content, 'utf-8')
+    debugFiles[file.path] = { rawBytes: buffer.length, first100: file.content.slice(0, 100) }
     const hash = createHash('sha256').update(buffer).digest('hex')
     manifest[file.path] = hash
     uploadPayload.push({
@@ -119,7 +122,7 @@ export async function POST(req: NextRequest) {
     deploymentUrl: result?.url,
     productionUrl: `https://${projectName}.pages.dev`,
     environment: result?.environment,
-    cfResponse: deployJson,
+    debugFiles,
   })
 }
 
