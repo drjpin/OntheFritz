@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createHash } from 'crypto'
+import { execSync } from 'child_process'
+import { writeFileSync, mkdirSync, rmSync } from 'fs'
+import { join } from 'path'
 import { getAccountFromToken, readSiteFiles } from '@/lib/supabase'
 
 const CF_BASE = 'https://api.cloudflare.com/client/v4'
@@ -19,7 +21,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(await res.json())
 }
 
-// POST /api/publish — deploy to Cloudflare Pages via Direct Upload API
+// POST /api/publish — deploy to Cloudflare Pages via Wrangler
 export async function POST(req: NextRequest) {
   const token = req.headers.get('x-session-token') ?? ''
   const account = await getAccountFromToken(token)
@@ -37,110 +39,39 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No site files to publish' }, { status: 400 })
   }
 
-  const accountId = account.cf_account_id
-  const projectName = account.cf_project_name
-  const apiToken = account.cf_api_token
-
-  // ── Step 1: Get upload JWT ────────────────────────────────────────────────
-  const jwtRes = await fetch(
-    `${CF_BASE}/accounts/${accountId}/pages/projects/${projectName}/upload-token`,
-    { headers: { Authorization: `Bearer ${apiToken}` } }
-  )
-  if (!jwtRes.ok) {
-    const err = await jwtRes.text()
-    return NextResponse.json({ error: `Failed to get upload token: ${err}` }, { status: 500 })
-  }
-  const { result: jwtResult } = await jwtRes.json()
-  const jwt = jwtResult?.jwt
-  if (!jwt) {
-    return NextResponse.json({ error: 'No JWT returned from upload-token endpoint' }, { status: 500 })
-  }
-
-  // ── Step 2: Upload file assets as base64 JSON ─────────────────────────────
-  const manifest: Record<string, string> = {}
-  const uploadPayload: Array<{ key: string; value: string; metadata: { contentType: string }; base64: boolean }> = []
-
-  const debugFiles: Record<string, { rawBytes: number; first100: string }> = {}
-
-  for (const file of files) {
-    const buffer = Buffer.from(file.content, 'utf-8')
-    debugFiles[file.path] = { rawBytes: buffer.length, first100: file.content.slice(0, 100) }
-    const hash = createHash('sha256').update(buffer).digest('hex')
-    manifest[file.path] = hash
-    uploadPayload.push({
-      key: hash,
-      value: buffer.toString('base64'),
-      metadata: { contentType: getContentType(file.path) },
-      base64: true,
-    })
-  }
-
-  console.log('Upload payload:', JSON.stringify(uploadPayload.map(f => ({
-    key: f.key,
-    bytes: f.value.length,
-    contentType: f.metadata.contentType,
-  }))))
-
-  const uploadRes = await fetch(`${CF_BASE}/pages/assets/upload`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${jwt}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(uploadPayload),
-  })
-  const uploadBody = await uploadRes.text()
-  console.log('Upload response:', uploadRes.status, uploadBody)
-  if (!uploadRes.ok) {
-    return NextResponse.json({ error: `Failed to upload assets: ${uploadBody}` }, { status: 500 })
-  }
-
-  // ── Step 3: Create deployment with manifest ───────────────────────────────
-  console.log('Manifest:', JSON.stringify(manifest))
-  const formData = new FormData()
-  formData.append('manifest', JSON.stringify(manifest))
-  formData.append('branch', 'main')
-
-  const deployRes = await fetch(
-    `${CF_BASE}/accounts/${accountId}/pages/projects/${projectName}/deployments`,
-    {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiToken}` },
-      body: formData,
+  // Write files to /tmp
+  const tmpDir = `/tmp/deploy-${Date.now()}`
+  try {
+    mkdirSync(tmpDir, { recursive: true })
+    for (const file of files) {
+      writeFileSync(join(tmpDir, file.path), file.content, 'utf-8')
     }
-  )
-  const deployBody = await deployRes.text()
-  if (!deployRes.ok) {
-    return NextResponse.json({ error: `Failed to create deployment: ${deployBody}` }, { status: 500 })
-  }
 
-  const deployJson = JSON.parse(deployBody)
-  const result = deployJson.result
-  return NextResponse.json({
-    ok: true,
-    deploymentId: result?.id,
-    deploymentUrl: result?.url,
-    productionUrl: `https://${projectName}.pages.dev`,
-    environment: result?.environment,
-    debugFiles,
-  })
-}
+    // Deploy using wrangler
+    const wrangler = join(process.cwd(), 'node_modules/.bin/wrangler')
+    const output = execSync(
+      `${wrangler} pages deploy ${tmpDir} --project-name=${account.cf_project_name} --branch=main --commit-dirty=true`,
+      {
+        env: {
+          ...process.env,
+          CLOUDFLARE_API_TOKEN: account.cf_api_token,
+          CLOUDFLARE_ACCOUNT_ID: account.cf_account_id,
+        },
+        timeout: 120000,
+      }
+    ).toString()
 
-function getContentType(path: string): string {
-  const ext = path.split('.').pop()?.toLowerCase()
-  const types: Record<string, string> = {
-    html: 'text/html',
-    css: 'text/css',
-    js: 'application/javascript',
-    json: 'application/json',
-    png: 'image/png',
-    jpg: 'image/jpeg',
-    jpeg: 'image/jpeg',
-    gif: 'image/gif',
-    svg: 'image/svg+xml',
-    webp: 'image/webp',
-    ico: 'image/x-icon',
-    txt: 'text/plain',
+    console.log('Wrangler output:', output)
+
+    return NextResponse.json({
+      ok: true,
+      url: `https://${account.cf_project_name}.pages.dev`,
+    })
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('Wrangler error:', msg)
+    return NextResponse.json({ error: `Deploy failed: ${msg}` }, { status: 500 })
+  } finally {
+    rmSync(tmpDir, { recursive: true, force: true })
   }
-  return types[ext ?? ''] ?? 'application/octet-stream'
 }
