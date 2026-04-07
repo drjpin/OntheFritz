@@ -47,10 +47,10 @@ export async function POST(req: NextRequest) {
       writeFileSync(join(tmpDir, file.path), file.content, 'utf-8')
     }
 
-    // Deploy using wrangler
-    const wrangler = join(process.cwd(), 'node_modules/.bin/wrangler')
+    // Deploy using wrangler (run via node directly to avoid symlink issues on Vercel)
+    const wranglerBin = join(process.cwd(), 'node_modules/wrangler/bin/wrangler.js')
     const output = execSync(
-      `${wrangler} pages deploy ${tmpDir} --project-name=${account.cf_project_name} --branch=main --commit-dirty=true`,
+      `node ${wranglerBin} pages deploy ${tmpDir} --project-name=${account.cf_project_name} --branch=main --commit-dirty=true`,
       {
         env: {
           ...process.env,
