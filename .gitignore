@@ -1,6 +1,7 @@
 # PHP config (contains secrets — never commit)
 config.php
 backups/
+usage.json
 
 # Dependencies
 /node_modules

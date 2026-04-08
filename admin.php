@@ -18,6 +18,25 @@ define('CORE_FILES', ['index.php', 'nav.php', 'footer.php', 'style.css', 'script
 define('BACKUP_DIR',    __DIR__ . '/backups');
 define('IMAGES_DIR',    __DIR__ . '/images');
 define('IMAGES_MANIFEST', __DIR__ . '/images.json');
+define('USAGE_FILE',      __DIR__ . '/usage.json');
+if (!defined('MONTHLY_TOKENS')) define('MONTHLY_TOKENS', 150000); // override in config.php
+
+// ── Usage tracking ─────────────────────────────────────────────────────────────
+
+function getUsage() {
+    if (!file_exists(USAGE_FILE)) return ['tokens_used' => 0, 'requests' => 0];
+    $all = json_decode(file_get_contents(USAGE_FILE), true) ?? [];
+    return $all[date('Y-m')] ?? ['tokens_used' => 0, 'requests' => 0];
+}
+
+function updateUsage($tokens) {
+    $all = file_exists(USAGE_FILE) ? (json_decode(file_get_contents(USAGE_FILE), true) ?? []) : [];
+    $key = date('Y-m');
+    if (!isset($all[$key])) $all[$key] = ['tokens_used' => 0, 'requests' => 0];
+    $all[$key]['tokens_used'] += $tokens;
+    $all[$key]['requests']++;
+    file_put_contents(USAGE_FILE, json_encode($all, JSON_PRETTY_PRINT));
+}
 
 // ── Image helpers ──────────────────────────────────────────────────────────────
 
@@ -208,6 +227,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     // ai_edit
     if ($action === 'ai_edit') {
         set_time_limit(0);
+
+        // Check monthly token limit before doing anything
+        $usage = getUsage();
+        if ($usage['tokens_used'] >= MONTHLY_TOKENS) {
+            $reset = date('M j', strtotime('first day of next month'));
+            echo json_encode(['error' => "Monthly AI budget reached — resets $reset. Contact us to adjust your limit."]);
+            exit;
+        }
+
         $file    = $_POST['file']    ?? '';
         $content = $_POST['content'] ?? '';
         $request = trim($_POST['request'] ?? '');
@@ -330,7 +358,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $result = $page_head . "\n\n" . $result . "\n\n" . $page_tail;
         }
 
-        echo json_encode(['content' => $result]);
+        // Track token usage from the API response
+        $tokens_used = ($data['usage']['input_tokens'] ?? 0) + ($data['usage']['output_tokens'] ?? 0);
+        updateUsage($tokens_used);
+        $current = getUsage();
+
+        echo json_encode([
+            'content'       => $result,
+            'tokens_used'   => $tokens_used,
+            'monthly_used'  => $current['tokens_used'],
+            'monthly_limit' => MONTHLY_TOKENS,
+            'reset_date'    => date('M j', strtotime('first day of next month')),
+        ]);
         exit;
     }
 
@@ -417,6 +456,18 @@ PHP;
             file_put_contents($path, $scaffold);
         }
         echo json_encode(['ok' => true, 'file' => $filename]);
+        exit;
+    }
+
+    // get_usage
+    if ($action === 'get_usage') {
+        $usage = getUsage();
+        echo json_encode([
+            'tokens_used'   => $usage['tokens_used'],
+            'monthly_limit' => MONTHLY_TOKENS,
+            'requests'      => $usage['requests'],
+            'reset_date'    => date('M j', strtotime('first day of next month')),
+        ]);
         exit;
     }
 
@@ -660,6 +711,31 @@ PHP;
     .selected-image-hint { padding: 8px 12px; background: rgba(56,139,253,0.08); border: 1px solid rgba(56,139,253,0.25); border-radius: 6px; font-size: 11px; color: #79c0ff; line-height: 1.4; display: none; margin-top: 6px; }
     .selected-image-hint.show { display: block; }
     .selected-image-hint strong { color: #58a6ff; }
+
+    /* ── Token meter ── */
+    .panel-header { padding: 10px 16px; border-bottom: 1px solid #30363d; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0; }
+    .panel-header-title { font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #8b949e; white-space: nowrap; }
+    .token-meter { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; min-width: 0; }
+    .token-bar-wrap { width: 100px; height: 3px; background: #21262d; border-radius: 2px; overflow: hidden; flex-shrink: 0; }
+    .token-bar-fill { height: 100%; border-radius: 2px; background: #238636; transition: width 0.5s ease, background 0.4s ease; width: 0%; }
+    .token-label { font-size: 10px; color: #8b949e; white-space: nowrap; }
+    .token-label.warn { color: #d29922; }
+    .token-label.danger { color: #f85149; }
+
+    /* ── Template chips ── */
+    .template-chips { padding: 10px 16px 8px; border-top: 1px solid #30363d; flex-shrink: 0; }
+    .template-chips-label { font-size: 10px; font-weight: 700; color: #484f58; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 7px; }
+    .template-chips-row { display: flex; flex-wrap: wrap; gap: 5px; }
+    .chip { padding: 4px 10px; background: #161b22; border: 1px solid #30363d; border-radius: 20px; color: #8b949e; font-size: 11px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+    .chip:hover { color: #e6edf3; border-color: #58a6ff; background: #1f3a5c; }
+
+    /* ── Preflight warning message ── */
+    .msg-warn { background: #1f1a0e !important; border: 1px solid #d29922 !important; color: #e6c87a !important; }
+    .warn-actions { display: flex; gap: 8px; margin-top: 10px; }
+    .btn-warn-proceed { padding: 6px 14px; background: #d29922; border: none; border-radius: 5px; color: #0d1117; font-size: 12px; font-weight: 700; cursor: pointer; transition: background 0.15s; }
+    .btn-warn-proceed:hover { background: #e3b341; }
+    .btn-warn-cancel { padding: 6px 14px; background: none; border: 1px solid #484f58; border-radius: 5px; color: #8b949e; font-size: 12px; cursor: pointer; transition: all 0.15s; }
+    .btn-warn-cancel:hover { color: #e6edf3; border-color: #8b949e; }
   </style>
 </head>
 <body>
@@ -687,9 +763,27 @@ PHP;
 
   <!-- AI Panel -->
   <div class="ai-panel">
-    <div class="panel-header">AI Assistant</div>
+    <div class="panel-header">
+      <span class="panel-header-title">AI Assistant</span>
+      <div class="token-meter" id="token-meter">
+        <div class="token-bar-wrap"><div class="token-bar-fill" id="token-bar-fill"></div></div>
+        <div class="token-label" id="token-label">Loading…</div>
+      </div>
+    </div>
     <div class="chat-log" id="chat-log">
-      <div class="msg msg-ai">Hi! I'm your AI editor. Tell me what you'd like to change on the site and I'll update the file for you. Hit <strong>Save</strong> when you're happy with the result.</div>
+      <div class="msg msg-ai">Hi! I'm your AI editor. Pick a quick-start below or just tell me what to change. Hit <strong>Save</strong> when you're happy with the result.</div>
+    </div>
+    <!-- Template chips -->
+    <div class="template-chips" id="template-chips">
+      <div class="template-chips-label">Quick start</div>
+      <div class="template-chips-row">
+        <button class="chip" onclick="startTemplate('blog')">📝 Blog Post</button>
+        <button class="chip" onclick="startTemplate('service')">📄 Service Page</button>
+        <button class="chip" onclick="startTemplate('hours')">🕐 Hours &amp; Info</button>
+        <button class="chip" onclick="startTemplate('bio')">👤 Update Bio</button>
+        <button class="chip" onclick="startTemplate('testimonial')">💬 Testimonial</button>
+        <button class="chip" onclick="startTemplate('offer')">🎯 Special Offer</button>
+      </div>
     </div>
     <div class="ai-input-area">
       <div class="ai-input-row">
@@ -863,25 +957,168 @@ async function updatePreview(updatedFile, updatedContent) {
   setTimeout(() => badge.classList.remove('show'), 3000);
 }
 
-// ── Ask AI ────────────────────────────────────────────────────────────────────
-async function askAI() {
-  const input = document.getElementById('ai-input');
-  let request = input.value.trim();
-  if (!request || isBusy) return;
+// ── Token meter ───────────────────────────────────────────────────────────────
+let usageData = { tokens_used: 0, monthly_limit: 150000, reset_date: '' };
 
-  // If an image is selected, append it as context so the AI can insert the right tag
-  if (selectedImage) {
-    request += `\n\n[Insert image: src="/images/${selectedImage.file}" alt="${selectedImage.alt}"]`;
+function updateMeter() {
+  const { tokens_used, monthly_limit } = usageData;
+  const pct  = Math.min(100, Math.round((tokens_used / monthly_limit) * 100));
+  const fill  = document.getElementById('token-bar-fill');
+  const label = document.getElementById('token-label');
+  fill.style.width      = pct + '%';
+  fill.style.background = pct >= 90 ? '#f85149' : pct >= 75 ? '#d29922' : '#238636';
+  const usedK  = (tokens_used  / 1000).toFixed(1);
+  const limitK = (monthly_limit / 1000).toFixed(0);
+  label.textContent = `${usedK}k / ${limitK}k tokens`;
+  label.className   = 'token-label' + (pct >= 90 ? ' danger' : pct >= 75 ? ' warn' : '');
+}
+
+async function loadUsage() {
+  const data = await api({ action: 'get_usage' });
+  if (!data.error) {
+    usageData = { tokens_used: data.tokens_used, monthly_limit: data.monthly_limit, reset_date: data.reset_date };
+    updateMeter();
   }
+}
 
+// ── Template system ───────────────────────────────────────────────────────────
+const TEMPLATES = [
+  {
+    id: 'blog',
+    label: 'Blog Post',
+    intro: "Let's write a blog post! I'll ask a few quick questions so the result is exactly what you need — no tokens wasted on back-and-forth.",
+    questions: [
+      "What topic would you like to write about?",
+      "Who's the main audience — existing patients, or people searching for help online?",
+      "What tone? Educational, motivational, or a mix with a soft push to book an appointment?",
+      "Any specific service or treatment to highlight? (type 'skip' to leave this out)"
+    ],
+    build: (a) => `Write a complete, SEO-friendly blog post about "${a[0]}". Audience: ${a[1]}. Tone: ${a[2]}. ${a[3].toLowerCase() !== 'skip' ? `Highlight this service/treatment: ${a[3]}.` : ''} Include a strong headline, engaging intro paragraph, 3–4 sections with subheadings, and a closing call-to-action. Format as clean HTML using the site's existing blog styles.`
+  },
+  {
+    id: 'service',
+    label: 'Service Page',
+    intro: "Let's build a new service page. A few quick questions first:",
+    questions: [
+      "What service is this page about?",
+      "Who does it help most — describe the ideal patient in a sentence?",
+      "What are the top 2–3 benefits patients get from this service?",
+      "Anything unique about how your practice delivers it?"
+    ],
+    build: (a) => `Create a complete service page for "${a[0]}". Ideal patient: ${a[1]}. Key benefits: ${a[2]}. What sets it apart: ${a[3]}. Include a hero section, benefits section, a how-it-works or what-to-expect section, and a booking call-to-action. Use the site's existing CSS classes.`
+  },
+  {
+    id: 'hours',
+    label: 'Hours & Info',
+    intro: "Sure! What needs updating?",
+    questions: [
+      "What's changing? (e.g. office hours, phone number, address, email)",
+      "What's the new information? Be as specific as possible."
+    ],
+    build: (a) => `Update the ${a[0]} with this new information: ${a[1]}`
+  },
+  {
+    id: 'bio',
+    label: 'Doctor Bio',
+    intro: "Let's refresh the doctor bio or about section. A couple of questions:",
+    questions: [
+      "What's changing? (new credentials, years of experience, a personal detail, philosophy, etc.)",
+      "Any specific wording you'd like kept or added? (or type 'skip')"
+    ],
+    build: (a) => `Update the doctor bio / about section with these changes: ${a[0]}.${a[1].toLowerCase() !== 'skip' ? ` Please work in this wording: "${a[1]}"` : ''}`
+  },
+  {
+    id: 'testimonial',
+    label: 'Testimonial',
+    intro: "Great — let's add a patient testimonial!",
+    questions: [
+      "What did the patient say? Paste their quote here.",
+      "What's their first name (and last initial if they're comfortable)?",
+      "What condition or issue did they come in for?"
+    ],
+    build: (a) => `Add a new patient testimonial to the testimonials section. Quote: "${a[0]}" — ${a[1]}, came in for ${a[2]}.`
+  },
+  {
+    id: 'offer',
+    label: 'Special Offer',
+    intro: "Let's add a promotion or special offer to the site:",
+    questions: [
+      "What's the offer? (e.g. Free initial consultation, 20% off first visit)",
+      "Who is it for? (new patients, all patients, a specific condition?)",
+      "Is there an expiry date? (or type 'none')"
+    ],
+    build: (a) => `Add a special offer section or highlight banner for: "${a[0]}". For: ${a[1]}. ${a[2].toLowerCase() !== 'none' ? `Expires: ${a[2]}.` : 'No expiry date.'} Make it eye-catching but professional.`
+  }
+];
+
+let templateFlow = null; // { template, questionIndex, answers }
+
+function startTemplate(id) {
+  const tmpl = TEMPLATES.find(t => t.id === id);
+  if (!tmpl) return;
+  templateFlow = { template: tmpl, questionIndex: 0, answers: [] };
+  document.getElementById('template-chips').style.display = 'none';
+  const inp = document.getElementById('ai-input');
+  inp.placeholder = 'Type your answer and press Ask AI (or ⌘↵)…';
+  inp.focus();
+  addMsg(tmpl.intro, 'ai');
+  setTimeout(() => addMsg(tmpl.questions[0], 'ai'), 350);
+}
+
+function captureTemplateAnswer(text) {
+  const { template: tmpl, questionIndex, answers } = templateFlow;
+  answers.push(text);
+  addMsg(text, 'user');
+  const next = questionIndex + 1;
+  if (next < tmpl.questions.length) {
+    templateFlow.questionIndex = next;
+    setTimeout(() => addMsg(tmpl.questions[next], 'ai'), 300);
+  } else {
+    // All answers collected — build the prompt and fire a single API call
+    templateFlow = null;
+    document.getElementById('template-chips').style.display = '';
+    document.getElementById('ai-input').placeholder = 'e.g. Change the practice name to Smith Chiropractic…';
+    const prompt = tmpl.build(answers);
+    setTimeout(() => {
+      addMsg(`Got it — putting your ${tmpl.label} together now…`, 'ai');
+      fireAIRequest(prompt);
+    }, 300);
+  }
+}
+
+// ── Preflight warning ─────────────────────────────────────────────────────────
+function estimateTokens(content, request) {
+  // ~4 chars per token + ~600 for system prompt overhead + ~2000 avg output
+  return Math.round((content.length + request.length) / 4) + 2600;
+}
+
+function showPreflightWarning(displayText, request, content, estimated, remaining) {
+  addMsg(displayText, 'user');
+  const pct = Math.round((estimated / remaining) * 100);
+  const log  = document.getElementById('chat-log');
+  const msg  = document.createElement('div');
+  msg.className = 'msg msg-ai msg-warn';
+  msg.innerHTML = `⚠️ This looks like a large request — roughly <strong>~${Math.round(estimated/1000)}k tokens</strong>, about <strong>${pct}%</strong> of your remaining monthly budget.<div class="warn-actions"><button class="btn-warn-proceed">Yes, proceed</button><button class="btn-warn-cancel">Cancel — let me simplify</button></div>`;
+  msg.querySelector('.btn-warn-proceed').addEventListener('click', () => {
+    msg.remove();
+    fireAIRequest(request);
+  });
+  msg.querySelector('.btn-warn-cancel').addEventListener('click', () => {
+    msg.remove();
+    const inp = document.getElementById('ai-input');
+    inp.value = displayText;
+    inp.focus();
+  });
+  log.appendChild(msg);
+  log.scrollTop = log.scrollHeight;
+}
+
+// ── Core AI request ───────────────────────────────────────────────────────────
+async function fireAIRequest(request) {
   setBusy(true);
-  addMsg(input.value.trim(), 'user');
   const thinking = addMsg('Thinking…', 'ai thinking');
-  input.value = '';
-
-  const content = document.getElementById('code-editor').value;
-  const data = await api({ action: 'ai_edit', file: currentFile, content, request });
-
+  const content  = document.getElementById('code-editor').value;
+  const data     = await api({ action: 'ai_edit', file: currentFile, content, request });
   thinking.remove();
   if (data.error) {
     addMsg('Error: ' + data.error, 'ai error');
@@ -889,8 +1126,50 @@ async function askAI() {
     document.getElementById('code-editor').value = data.content;
     await updatePreview(currentFile, data.content);
     addMsg('Done! Preview updated — hit Save to push it live.', 'ai success');
+    if (data.monthly_used !== undefined) {
+      usageData.tokens_used = data.monthly_used;
+      usageData.monthly_limit = data.monthly_limit;
+      usageData.reset_date   = data.reset_date;
+      updateMeter();
+    }
   }
   setBusy(false);
+}
+
+// ── Ask AI ────────────────────────────────────────────────────────────────────
+async function askAI() {
+  const input = document.getElementById('ai-input');
+  const text  = input.value.trim();
+  if (!text || isBusy) return;
+  input.value = '';
+
+  // Template flow: capture answer, don't hit the API yet
+  if (templateFlow) { captureTemplateAnswer(text); return; }
+
+  // Build the request, appending image context if one is selected
+  let request = text;
+  if (selectedImage) {
+    request += `\n\n[Insert image: src="/images/${selectedImage.file}" alt="${selectedImage.alt}"]`;
+  }
+
+  const content   = document.getElementById('code-editor').value;
+  const remaining = usageData.monthly_limit - usageData.tokens_used;
+
+  // Hard monthly limit
+  if (remaining <= 0) {
+    addMsg(`Your monthly AI budget is used up — resets ${usageData.reset_date}. Contact us if you need more.`, 'ai error');
+    return;
+  }
+
+  // Preflight warning for large requests (>10% of remaining budget, min 3k tokens)
+  const estimated = estimateTokens(content, request);
+  if (estimated > Math.max(remaining * 0.10, 3000)) {
+    showPreflightWarning(text, request, content, estimated, remaining);
+    return;
+  }
+
+  addMsg(text, 'user');
+  await fireAIRequest(request);
 }
 
 document.getElementById('ai-input').addEventListener('keydown', e => {
@@ -1245,10 +1524,9 @@ function esc(str) {
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
-// Pre-load the current file into the hidden editor so AI has content to work with
 loadFile('index.php');
-// Hide code editor by default (preview iframe is shown)
 document.getElementById('code-editor').style.display = 'none';
+loadUsage();
 </script>
 </body>
 </html>
