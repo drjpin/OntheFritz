@@ -431,7 +431,12 @@ PHP;
         if (!in_array($f['type'], $allowed, true)) {
             echo json_encode(['error' => 'Only JPEG, PNG, WebP, or GIF allowed']); exit;
         }
-        if (!is_dir(IMAGES_DIR)) mkdir(IMAGES_DIR, 0755, true);
+        if (!is_dir(IMAGES_DIR)) {
+            mkdir(IMAGES_DIR, 0755, true);
+            chmod(IMAGES_DIR, 0755);
+            // Allow direct file access (important on some shared hosting configs)
+            file_put_contents(IMAGES_DIR . '/.htaccess', "Options -Indexes\n<FilesMatch \"\.(jpg|jpeg|png|gif|webp)$\">\n  Require all granted\n</FilesMatch>\n");
+        }
 
         // Slugify filename
         $slug = strtolower(trim(pathinfo($f['name'], PATHINFO_FILENAME)));
@@ -447,6 +452,7 @@ PHP;
         $dest = IMAGES_DIR . '/' . $dest_name;
         $dims = resizeImage($f['tmp_name'], $dest);
         if (!$dims) { echo json_encode(['error' => 'Image processing failed — GD library may be missing']); exit; }
+        chmod($dest, 0644); // ensure Apache can read it
 
         $alt      = generateAltText($dest);
         $manifest = getImagesManifest();
