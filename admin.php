@@ -238,14 +238,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         exit;
     }
 
-    // new_page — create a blank html file so it appears in the tab list
+    // new_page — create a pre-scaffolded html file with nav/footer already in place
     if ($action === 'new_page') {
         $name = preg_replace('/[^a-z0-9\-]/', '', strtolower($_POST['name'] ?? ''));
         if (!$name) { echo json_encode(['error' => 'Invalid page name']); exit; }
         $filename = $name . '.html';
         if (in_array($filename, CORE_FILES, true)) { echo json_encode(['error' => 'Cannot overwrite a core file']); exit; }
         $path = __DIR__ . '/' . $filename;
-        if (!file_exists($path)) file_put_contents($path, '');
+        if (!file_exists($path)) {
+            // Pull nav & footer from index.html so new pages always match
+            $index    = file_exists(__DIR__ . '/index.html') ? file_get_contents(__DIR__ . '/index.html') : '';
+            $nav      = '';
+            $footer   = '';
+            if (preg_match('/<header class="nav".*?<\/header>/s', $index, $m)) $nav = $m[0];
+            if (preg_match('/<footer class="footer">.*?<\/footer>/s', $index, $m)) $footer = $m[0];
+            // Fix anchor links in nav to point back to index.html
+            $nav = preg_replace('/href="#/', 'href="index.html#', $nav);
+            $title = ucwords(str_replace('-', ' ', $name));
+            $scaffold = <<<HTML
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{$title} | Sunrise Chiropractic</title>
+  <meta name="description" content="" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+{$nav}
+
+<!-- PAGE CONTENT: Replace everything between here and the footer -->
+<main class="section">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">Sunrise Chiropractic</div>
+      <h1 class="section-title">{$title}</h1>
+      <p class="section-sub">Page content goes here.</p>
+    </div>
+  </div>
+</main>
+<!-- END PAGE CONTENT -->
+
+{$footer}
+
+<script src="script.js"></script>
+</body>
+</html>
+HTML;
+            file_put_contents($path, $scaffold);
+        }
         echo json_encode(['ok' => true, 'file' => $filename]);
         exit;
     }
@@ -660,7 +706,7 @@ async function newPage() {
   currentFile = data.file;
   document.getElementById('code-editor').value = '';
   document.getElementById('editor-file-label').textContent = 'Live Preview';
-  addMsg(`New page "${data.file}" created! Now tell me what to put on it and I'll write it for you.`, 'ai');
+  addMsg(`New page "${data.file}" created with nav and footer already in place! Just tell me what content to put on it — I only need to write the middle section.`, 'ai');
 }
 
 function switchTab(tab, file) {
