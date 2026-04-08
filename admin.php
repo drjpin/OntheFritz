@@ -132,7 +132,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
     // ai_edit
     if ($action === 'ai_edit') {
-        set_time_limit(0); // Remove PHP execution time limit for AI requests
+        set_time_limit(0);
         $file    = $_POST['file']    ?? '';
         $content = $_POST['content'] ?? '';
         $request = trim($_POST['request'] ?? '');
@@ -142,30 +142,69 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         }
 
         $ext  = pathinfo($file, PATHINFO_EXTENSION);
-        $lang = match($ext) { 'html' => 'HTML', 'css' => 'CSS', 'js' => 'JavaScript', default => $ext };
+        $lang = match($ext) { 'html' => 'HTML', 'css' => 'CSS', 'js' => 'JavaScript', 'php' => 'PHP/HTML', default => $ext };
 
-        // Give AI context about the full site structure
         $other_files = array_filter(SITE_FILES, fn($f) => $f !== $file);
         $file_list   = implode(', ', array_values($other_files));
-        $is_new      = empty(trim($content));
 
-        $system_prompt = "You are an expert web developer editing a chiropractic practice website. "
-            . "The site uses PHP includes: nav.php contains the navigation, footer.php contains the footer. "
-            . "Every page already has <?php include 'nav.php'; ?> and <?php include 'footer.php'; ?> — do NOT add or duplicate these. "
-            . "The site files are: $file_list, plus the file you are editing: $file. "
-            . "Rules you MUST follow:\n"
-            . "1. Return ONLY the raw file content — no explanation, no markdown fences, no commentary.\n"
-            . "2. You are editing ONLY $file. Do not modify any other file.\n"
-            . "3. When editing nav.php or footer.php, your changes will automatically apply to every page on the site.\n"
-            . "4. Page files (.php) already include nav.php and footer.php — only edit the content between those includes.\n"
-            . "5. All internal links use .php extensions (e.g. index.php, blog.php).\n"
-            . "6. Match the existing site's fonts (Playfair Display, Inter), colors (#1a4f72 primary, #2980b9 accent), and layout conventions.";
+        // ── For PHP page files (not nav/footer/css/js) ──────────────────────
+        // Extract just the content section between the PHP includes.
+        // The AI only sees and edits that section — it can never break the nav/footer.
+        $shared_files  = ['nav.php', 'footer.php', 'style.css', 'script.js'];
+        $is_php_page   = ($ext === 'php' && !in_array($file, $shared_files, true));
+        $page_head     = '';
+        $page_tail     = '';
+        $edit_content  = $content;
 
-        $context      = $is_new
-            ? "This is a brand new empty file. Create it from scratch, matching the site's existing style."
-            : "Current content of $file:\n\n$content";
+        if ($is_php_page) {
+            $nav_marker    = "<?php include 'nav.php'; ?>";
+            $footer_marker = "<?php include 'footer.php'; ?>";
+            $nav_pos       = strpos($content, $nav_marker);
+            $footer_pos    = strpos($content, $footer_marker);
 
-        $user_message = "$context\n\n---\nRequest: $request\n\nReturn ONLY the complete $lang content for $file.";
+            if ($nav_pos !== false && $footer_pos !== false) {
+                $page_head    = substr($content, 0, $nav_pos + strlen($nav_marker));
+                $edit_content = substr($content, $nav_pos + strlen($nav_marker), $footer_pos - ($nav_pos + strlen($nav_marker)));
+                $page_tail    = substr($content, $footer_pos);
+            }
+        }
+
+        $is_new = empty(trim($edit_content));
+
+        if ($is_php_page) {
+            $system_prompt = "You are an expert web developer writing the main content section of a chiropractic website page. "
+                . "The nav and footer are handled separately via PHP includes — do NOT include any navigation, header, or footer HTML. "
+                . "Return ONLY the HTML content that goes between the nav and footer: typically a hero/banner section followed by the main content. "
+                . "Use these CSS classes and design conventions from the existing site:\n"
+                . "- Section wrapper: <section class=\"section\"> or <section class=\"section section-alt\"> or <section class=\"section section-dark\">\n"
+                . "- Container: <div class=\"container\">\n"
+                . "- Section label (small caps): <div class=\"section-label\">\n"
+                . "- Section title: <h1 class=\"section-title\"> or <h2 class=\"section-title\">\n"
+                . "- Section subtitle: <p class=\"section-sub\">\n"
+                . "- Cards: <div class=\"service-card\">\n"
+                . "- Buttons: <a class=\"btn btn-primary\"> or <a class=\"btn btn-white\">\n"
+                . "- Colors: primary #1a4f72, accent #2980b9, fonts: Playfair Display (headings), Inter (body)\n"
+                . "Return ONLY the raw HTML content section — no doctype, no head, no nav, no footer, no php tags.";
+
+            $context      = $is_new
+                ? "This is a new page. Write a complete, well-structured content section for it."
+                : "Current content section of $file:\n\n" . trim($edit_content);
+        } else {
+            $system_prompt = "You are an expert web developer editing a chiropractic practice website. "
+                . "The site uses PHP includes: nav.php contains the navigation, footer.php contains the footer. "
+                . "The site files are: $file_list, plus the file you are editing: $file. "
+                . "Rules:\n"
+                . "1. Return ONLY the raw file content — no explanation, no markdown fences, no commentary.\n"
+                . "2. Edit ONLY $file.\n"
+                . "3. All internal links use .php extensions.\n"
+                . "4. Match fonts (Playfair Display, Inter), colors (#1a4f72 primary, #2980b9 accent), and layout conventions.";
+
+            $context = $is_new
+                ? "This is a new file. Create it matching the site's existing style."
+                : "Current content of $file:\n\n$content";
+        }
+
+        $user_message = "$context\n\n---\nRequest: $request\n\nReturn ONLY the content as instructed.";
 
         $payload = json_encode([
             'model'      => 'claude-opus-4-5',
@@ -208,8 +247,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $result = trim($data['content'][0]['text']);
         $result = preg_replace('/^```[a-z]*\n?/i', '', $result);
         $result = preg_replace('/\n?```$/i', '', $result);
+        $result = trim($result);
 
-        echo json_encode(['content' => trim($result)]);
+        // For PHP page files: reassemble with the original head and tail
+        // so nav/footer includes are always preserved
+        if ($is_php_page && $page_head && $page_tail) {
+            $result = $page_head . "\n\n" . $result . "\n\n" . $page_tail;
+        }
+
+        echo json_encode(['content' => $result]);
         exit;
     }
 
