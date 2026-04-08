@@ -16,10 +16,7 @@
     .blog-hero-label { font-size: 12px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; color: rgba(255,255,255,0.6); margin-bottom: 12px; }
     .blog-hero-title { font-family: var(--font-heading); font-size: clamp(32px, 5vw, 52px); font-weight: 800; line-height: 1.1; margin-bottom: 16px; }
     .blog-hero-sub { font-size: 18px; opacity: 0.85; max-width: 540px; line-height: 1.7; }
-
     .blog-grid { display: grid; grid-template-columns: 1fr 320px; gap: 56px; align-items: start; padding: 72px 0; }
-
-    /* ── Post card (index) ── */
     .post-list { display: flex; flex-direction: column; gap: 40px; }
     .post-card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: all 0.25s; }
     .post-card:hover { box-shadow: var(--shadow); transform: translateY(-2px); }
@@ -30,11 +27,15 @@
     .post-title { font-family: var(--font-heading); font-size: 24px; color: var(--primary); margin-bottom: 12px; line-height: 1.25; }
     .post-title a { color: inherit; transition: color 0.15s; }
     .post-title a:hover { color: var(--accent); }
-    .post-excerpt { color: var(--text-muted); font-size: 15px; line-height: 1.75; margin-bottom: 20px; }
-    .post-read-more { font-weight: 700; font-size: 14px; color: var(--accent); display: inline-flex; align-items: center; gap: 6px; transition: gap 0.15s; }
-    .post-read-more:hover { gap: 10px; }
-
-    /* ── Sidebar ── */
+    .post-full-divider { width: 60px; height: 3px; background: var(--accent); border-radius: 2px; margin: 24px 0; }
+    .post-content { font-size: 17px; line-height: 1.85; color: #374151; }
+    .post-content h2 { font-family: var(--font-heading); font-size: 26px; color: var(--primary); margin: 40px 0 14px; }
+    .post-content h3 { font-family: var(--font-heading); font-size: 20px; color: var(--primary); margin: 28px 0 10px; }
+    .post-content p { margin-bottom: 20px; }
+    .post-content ul, .post-content ol { margin: 0 0 20px 24px; }
+    .post-content li { margin-bottom: 8px; }
+    .post-content blockquote { border-left: 4px solid var(--accent); padding: 16px 24px; background: var(--bg-alt); border-radius: 0 var(--radius) var(--radius) 0; margin: 28px 0; font-style: italic; color: var(--primary); font-size: 18px; }
+    .post-content strong { color: var(--primary); font-weight: 700; }
     .sidebar { display: flex; flex-direction: column; gap: 28px; }
     .sidebar-widget { background: var(--bg-alt); border-radius: var(--radius); padding: 24px; }
     .sidebar-widget-title { font-family: var(--font-heading); font-size: 18px; color: var(--primary); margin-bottom: 16px; }
@@ -46,24 +47,6 @@
     .recent-post a { font-size: 14px; font-weight: 600; color: var(--primary); line-height: 1.4; transition: color 0.15s; }
     .recent-post a:hover { color: var(--accent); }
     .recent-post span { font-size: 12px; color: var(--text-muted); }
-
-    /* ── Single post ── */
-    .post-full { max-width: 760px; }
-    .post-full-header { margin-bottom: 40px; }
-    .post-full-title { font-family: var(--font-heading); font-size: clamp(28px, 4vw, 42px); color: var(--primary); line-height: 1.15; margin-bottom: 16px; }
-    .post-full-meta { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-    .post-full-divider { width: 60px; height: 3px; background: var(--accent); border-radius: 2px; margin: 24px 0; }
-    .post-content { font-size: 17px; line-height: 1.85; color: #374151; }
-    .post-content h2 { font-family: var(--font-heading); font-size: 26px; color: var(--primary); margin: 40px 0 14px; }
-    .post-content h3 { font-family: var(--font-heading); font-size: 20px; color: var(--primary); margin: 28px 0 10px; }
-    .post-content p { margin-bottom: 20px; }
-    .post-content ul, .post-content ol { margin: 0 0 20px 24px; }
-    .post-content li { margin-bottom: 8px; }
-    .post-content blockquote { border-left: 4px solid var(--accent); padding: 16px 24px; background: var(--bg-alt); border-radius: 0 var(--radius) var(--radius) 0; margin: 28px 0; font-style: italic; color: var(--primary); font-size: 18px; }
-    .post-content strong { color: var(--primary); font-weight: 700; }
-    .post-back { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--text-muted); margin-bottom: 32px; transition: color 0.15s; }
-    .post-back:hover { color: var(--primary); }
-
     @media (max-width: 900px) {
       .blog-grid { grid-template-columns: 1fr; }
       .sidebar { order: -1; }
@@ -72,38 +55,7 @@
 </head>
 <body>
 
-<!-- SECTION: Navigation -->
-<header class="nav" id="nav">
-  <div class="container nav-inner">
-    <a href="index.html" class="nav-logo">
-      <span class="nav-logo-name">Sunrise Chiropractic</span>
-      <span class="nav-logo-tag">Your path to a pain-free life</span>
-    </a>
-    <nav class="nav-links" id="nav-links">
-      <a href="index.html#services">Services</a>
-      <a href="index.html#about">About</a>
-      <a href="index.html#testimonials">Testimonials</a>
-      <a href="index.html#contact">Hours & Contact</a>
-      <a href="blog.html" style="color:var(--primary);font-weight:700;">Blog</a>
-    </nav>
-    <div class="nav-right">
-      <a href="tel:5558675309" class="nav-phone">(555) 867-5309</a>
-      <a href="index.html#contact" class="btn btn-primary nav-cta">Book Now</a>
-    </div>
-    <button class="nav-hamburger" id="nav-hamburger" aria-label="Toggle menu">
-      <span></span><span></span><span></span>
-    </button>
-  </div>
-  <div class="nav-mobile" id="nav-mobile">
-    <a href="index.html#services" class="nav-mobile-link">Services</a>
-    <a href="index.html#about" class="nav-mobile-link">About</a>
-    <a href="index.html#testimonials" class="nav-mobile-link">Testimonials</a>
-    <a href="index.html#contact" class="nav-mobile-link">Hours &amp; Contact</a>
-    <a href="blog.html" class="nav-mobile-link" style="color:var(--primary);font-weight:700;">Blog</a>
-    <a href="tel:5558675309" class="nav-mobile-link nav-mobile-phone">(555) 867-5309</a>
-    <a href="index.html#contact" class="btn btn-primary" style="margin-top:8px;display:block;text-align:center;">Book Now</a>
-  </div>
-</header>
+<?php include 'nav.php'; ?>
 
 <!-- Blog Hero -->
 <div class="blog-hero">
@@ -186,7 +138,7 @@
 
             <h2>Ready to Experience It for Yourself?</h2>
             <p>The best way to understand what a chiropractic adjustment feels like is to experience one. We offer a <strong>free initial consultation</strong> — no commitment, no pressure. Just a conversation about what's going on with your body and whether chiropractic care might help.</p>
-            <p><a href="index.html#contact" class="btn btn-primary" style="display:inline-block;margin-top:8px;">Book Your Free Consultation &rarr;</a></p>
+            <p><a href="index.php#contact" class="btn btn-primary" style="display:inline-block;margin-top:8px;">Book Your Free Consultation &rarr;</a></p>
           </div>
 
         </div>
@@ -199,7 +151,7 @@
       <div class="sidebar-widget sidebar-cta">
         <div class="sidebar-widget-title">Ready to Feel Better?</div>
         <p>Free consultations available. Same-week appointments. No referral needed.</p>
-        <a href="index.html#contact" class="btn btn-white" style="display:block;text-align:center;">Book Now &rarr;</a>
+        <a href="index.php#contact" class="btn btn-white" style="display:block;text-align:center;">Book Now &rarr;</a>
       </div>
       <div class="sidebar-widget">
         <div class="sidebar-widget-title">Recent Posts</div>
@@ -222,28 +174,7 @@
   </div>
 </div>
 
-<!-- Footer -->
-<footer class="footer">
-  <div class="container footer-inner">
-    <div>
-      <div class="footer-logo">Sunrise Chiropractic</div>
-      <div class="footer-address">1234 Wellness Blvd, Suite 100<br>Springfield, IL 62701<br>(555) 867-5309</div>
-    </div>
-    <div>
-      <div class="footer-links-title">Quick Links</div>
-      <a href="index.html#services" class="footer-link">Services</a>
-      <a href="index.html#about" class="footer-link">About</a>
-      <a href="index.html#testimonials" class="footer-link">Testimonials</a>
-      <a href="index.html#contact" class="footer-link">Hours &amp; Contact</a>
-      <a href="blog.html" class="footer-link">Blog</a>
-    </div>
-  </div>
-  <div class="footer-bottom">
-    <div class="container footer-bottom-inner">
-      <span>&copy; <span id="year"></span> Sunrise Chiropractic. All rights reserved.</span>
-    </div>
-  </div>
-</footer>
+<?php include 'footer.php'; ?>
 
 <script src="script.js"></script>
 </body>

@@ -1,0 +1,5 @@
+# Serve index.php as default — takes priority over index.html
+DirectoryIndex index.php index.html
+
+# Clean URLs: allow /blog to load blog.php
+Options -Indexes

@@ -14,14 +14,20 @@ define(\'ANTHROPIC_API_KEY\', \'sk-ant-...\');
 }
 require_once $config_file;
 
-define('CORE_FILES', ['index.html', 'style.css', 'script.js']);
+define('CORE_FILES', ['index.php', 'nav.php', 'footer.php', 'style.css', 'script.js']);
 define('BACKUP_DIR', __DIR__ . '/backups');
 
-// Dynamically include any extra .html pages (blog.html, about.html, etc.)
+// Dynamically include any extra .php page files and leftover .html files
 function getSiteFiles() {
-    $files = CORE_FILES;
-    $extra = glob(__DIR__ . '/*.html');
-    foreach ($extra as $f) {
+    $files   = CORE_FILES;
+    $exclude = ['admin.php', 'config.php', 'setup.php', 'nav.php', 'footer.php', 'index.php'];
+    // Extra .php pages
+    foreach (glob(__DIR__ . '/*.php') as $f) {
+        $name = basename($f);
+        if (!in_array($name, $exclude, true) && !in_array($name, $files, true)) $files[] = $name;
+    }
+    // Any remaining .html files
+    foreach (glob(__DIR__ . '/*.html') as $f) {
         $name = basename($f);
         if (!in_array($name, $files, true)) $files[] = $name;
     }
@@ -144,13 +150,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $is_new      = empty(trim($content));
 
         $system_prompt = "You are an expert web developer editing a chiropractic practice website. "
-            . "The site consists of these files: $file_list, plus the file you are editing: $file. "
+            . "The site uses PHP includes: nav.php contains the navigation, footer.php contains the footer. "
+            . "Every page already has <?php include 'nav.php'; ?> and <?php include 'footer.php'; ?> — do NOT add or duplicate these. "
+            . "The site files are: $file_list, plus the file you are editing: $file. "
             . "Rules you MUST follow:\n"
             . "1. Return ONLY the raw file content — no explanation, no markdown fences, no commentary.\n"
-            . "2. You are editing ONLY $file. Do not reference or modify any other file.\n"
-            . "3. All HTML pages must link to style.css and script.js with relative paths.\n"
-            . "4. Pages other than index.html must include navigation with a Home link back to index.html.\n"
-            . "5. Never replace or duplicate index.html — each HTML file is a separate standalone page.\n"
+            . "2. You are editing ONLY $file. Do not modify any other file.\n"
+            . "3. When editing nav.php or footer.php, your changes will automatically apply to every page on the site.\n"
+            . "4. Page files (.php) already include nav.php and footer.php — only edit the content between those includes.\n"
+            . "5. All internal links use .php extensions (e.g. index.php, blog.php).\n"
             . "6. Match the existing site's fonts (Playfair Display, Inter), colors (#1a4f72 primary, #2980b9 accent), and layout conventions.";
 
         $context      = $is_new
@@ -242,20 +250,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     if ($action === 'new_page') {
         $name = preg_replace('/[^a-z0-9\-]/', '', strtolower($_POST['name'] ?? ''));
         if (!$name) { echo json_encode(['error' => 'Invalid page name']); exit; }
-        $filename = $name . '.html';
+        $filename = $name . '.php';
         if (in_array($filename, CORE_FILES, true)) { echo json_encode(['error' => 'Cannot overwrite a core file']); exit; }
         $path = __DIR__ . '/' . $filename;
         if (!file_exists($path)) {
-            // Pull nav & footer from index.html so new pages always match
-            $index    = file_exists(__DIR__ . '/index.html') ? file_get_contents(__DIR__ . '/index.html') : '';
-            $nav      = '';
-            $footer   = '';
-            if (preg_match('/<header class="nav".*?<\/header>/s', $index, $m)) $nav = $m[0];
-            if (preg_match('/<footer class="footer">.*?<\/footer>/s', $index, $m)) $footer = $m[0];
-            // Fix anchor links in nav to point back to index.html
-            $nav = preg_replace('/href="#/', 'href="index.html#', $nav);
-            $title = ucwords(str_replace('-', ' ', $name));
-            $scaffold = <<<HTML
+            $title    = ucwords(str_replace('-', ' ', $name));
+            $scaffold = <<<PHP
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -270,9 +270,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 </head>
 <body>
 
-{$nav}
+<?php include 'nav.php'; ?>
 
-<!-- PAGE CONTENT: Replace everything between here and the footer -->
+<!-- PAGE CONTENT: The AI will write everything between here and the footer -->
 <main class="section">
   <div class="container">
     <div class="section-header">
@@ -284,12 +284,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 </main>
 <!-- END PAGE CONTENT -->
 
-{$footer}
+<?php include 'footer.php'; ?>
 
 <script src="script.js"></script>
 </body>
 </html>
-HTML;
+PHP;
             file_put_contents($path, $scaffold);
         }
         echo json_encode(['ok' => true, 'file' => $filename]);
@@ -447,7 +447,7 @@ HTML;
       </div>
     </div>
     <div class="editor-area">
-      <iframe class="preview-iframe" id="preview-iframe" src="/index.html"></iframe>
+      <iframe class="preview-iframe" id="preview-iframe" src="/index.php"></iframe>
       <textarea class="code-editor" id="code-editor" spellcheck="false"></textarea>
       <div class="preview-pending" id="preview-pending">Preview updated — save to go live</div>
     </div>
@@ -584,7 +584,7 @@ async function saveFile() {
     setTimeout(() => {
       const iframe = document.getElementById('preview-iframe');
       iframe.removeAttribute('srcdoc');
-      iframe.src = '/' + currentFile + '?' + Date.now(); // load correct page, cache bust
+      iframe.src = '/' + getPreviewFile(currentFile) + '?' + Date.now();
     }, 800);
   } else {
     showToast('Save failed: ' + (data.error ?? 'Unknown error'), 'err');
@@ -686,6 +686,13 @@ function formatBackupDate(b) {
   return d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
+// ── Get preview file for a given editable file ────────────────────────────────
+// nav.php, footer.php, style.css, script.js all preview as the home page
+function getPreviewFile(file) {
+  const shared = ['nav.php', 'footer.php', 'style.css', 'script.js'];
+  return shared.includes(file) ? 'index.php' : file;
+}
+
 // ── New page ──────────────────────────────────────────────────────────────────
 async function newPage() {
   const name = prompt('Page name (e.g. "blog", "about", "services"):');
@@ -721,11 +728,9 @@ function switchTab(tab, file) {
     document.getElementById('editor-file-label').textContent = file;
   }
   // Point preview at the correct page
-  if (file.endsWith('.html')) {
-    const iframe = document.getElementById('preview-iframe');
-    iframe.removeAttribute('srcdoc');
-    iframe.src = '/' + file + '?' + Date.now();
-  }
+  const iframe = document.getElementById('preview-iframe');
+  iframe.removeAttribute('srcdoc');
+  iframe.src = '/' + getPreviewFile(file) + '?' + Date.now();
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────

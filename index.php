@@ -39,38 +39,7 @@
 </head>
 <body>
 
-<!-- SECTION: Navigation -->
-<header class="nav" id="nav">
-  <div class="container nav-inner">
-    <a href="#home" class="nav-logo">
-      <span class="nav-logo-name">Sunrise Chiropractic</span>
-      <span class="nav-logo-tag">Your path to a pain-free life</span>
-    </a>
-    <nav class="nav-links" id="nav-links">
-      <a href="#services">Services</a>
-      <a href="#about">About</a>
-      <a href="#testimonials">Testimonials</a>
-      <a href="#contact">Hours & Contact</a>
-      <a href="blog.html">Blog</a>
-    </nav>
-    <div class="nav-right">
-      <a href="tel:5558675309" class="nav-phone">(555) 867-5309</a>
-      <a href="#contact" class="btn btn-primary nav-cta">Book Now</a>
-    </div>
-    <button class="nav-hamburger" id="nav-hamburger" aria-label="Toggle menu">
-      <span></span><span></span><span></span>
-    </button>
-  </div>
-  <div class="nav-mobile" id="nav-mobile">
-    <a href="#services" class="nav-mobile-link">Services</a>
-    <a href="#about" class="nav-mobile-link">About</a>
-    <a href="#testimonials" class="nav-mobile-link">Testimonials</a>
-    <a href="#contact" class="nav-mobile-link">Hours &amp; Contact</a>
-    <a href="blog.html" class="nav-mobile-link">Blog</a>
-    <a href="tel:5558675309" class="nav-mobile-link nav-mobile-phone">(555) 867-5309</a>
-    <a href="#contact" class="btn btn-primary" style="margin-top:8px;display:block;text-align:center;">Book Now</a>
-  </div>
-</header>
+<?php include 'nav.php'; ?>
 
 <!-- SECTION: Hero -->
 <section class="hero" id="home">
@@ -251,27 +220,7 @@
   </div>
 </section>
 
-<!-- SECTION: Footer -->
-<footer class="footer">
-  <div class="container footer-inner">
-    <div>
-      <div class="footer-logo">Sunrise Chiropractic</div>
-      <div class="footer-address">1234 Wellness Blvd, Suite 100<br>Springfield, IL 62701<br>(555) 867-5309</div>
-    </div>
-    <div>
-      <div class="footer-links-title">Quick Links</div>
-      <a href="#services" class="footer-link">Services</a>
-      <a href="#about" class="footer-link">About</a>
-      <a href="#testimonials" class="footer-link">Testimonials</a>
-      <a href="#contact" class="footer-link">Hours &amp; Contact</a>
-    </div>
-  </div>
-  <div class="footer-bottom">
-    <div class="container footer-bottom-inner">
-      <span>&copy; <span id="year"></span> Sunrise Chiropractic. All rights reserved.</span>
-    </div>
-  </div>
-</footer>
+<?php include 'footer.php'; ?>
 
 <script src="script.js"></script>
 </body>
