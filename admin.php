@@ -269,11 +269,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     .editor-actions { display: flex; gap: 8px; align-items: center; }
     .btn-history { padding: 6px 12px; background: none; border: 1px solid #30363d; border-radius: 6px; color: #8b949e; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
     .btn-history:hover { color: #e6edf3; border-color: #8b949e; }
+    .btn-toggle-code { padding: 6px 12px; background: none; border: 1px solid #30363d; border-radius: 6px; color: #8b949e; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+    .btn-toggle-code:hover { color: #e6edf3; border-color: #8b949e; }
+    .btn-toggle-code.active { color: #e6edf3; border-color: #388bfd; background: #1f3a5c; }
     .btn-save { padding: 7px 20px; background: #238636; border: none; border-radius: 6px; color: #fff; font-size: 13px; font-weight: 700; cursor: pointer; transition: background 0.2s; }
     .btn-save:hover { background: #2ea043; }
     .btn-save:disabled { background: #21262d; color: #8b949e; cursor: not-allowed; }
     .editor-area { flex: 1; overflow: hidden; position: relative; }
-    .code-editor { width: 100%; height: 100%; padding: 16px; background: #0d1117; color: #e6edf3; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; font-size: 13px; line-height: 1.65; border: none; outline: none; resize: none; tab-size: 2; }
+    .preview-iframe { width: 100%; height: 100%; border: none; background: #fff; }
+    .code-editor { display: none; width: 100%; height: 100%; padding: 16px; background: #0d1117; color: #e6edf3; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; font-size: 13px; line-height: 1.65; border: none; outline: none; resize: none; tab-size: 2; }
+    .preview-pending { position: absolute; bottom: 16px; right: 16px; background: #1f6feb; color: #fff; padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
+    .preview-pending.show { opacity: 1; }
 
     /* ── History Modal ── */
     .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 1000; align-items: center; justify-content: center; }
@@ -345,14 +351,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
   <!-- Editor Panel -->
   <div class="editor-panel">
     <div class="editor-toolbar">
-      <span class="editor-file-label" id="editor-file-label">index.html</span>
+      <span class="editor-file-label" id="editor-file-label">Live Preview</span>
       <div class="editor-actions">
+        <button class="btn-toggle-code" id="btn-toggle-code" onclick="toggleCode()">&#60;/&#62; View Code</button>
         <button class="btn-history" onclick="openHistory()">⟳ Version History</button>
         <button class="btn-save" id="btn-save" onclick="saveFile()">Save to Server</button>
       </div>
     </div>
     <div class="editor-area">
+      <iframe class="preview-iframe" id="preview-iframe" src="/"></iframe>
       <textarea class="code-editor" id="code-editor" spellcheck="false"></textarea>
+      <div class="preview-pending" id="preview-pending">Preview updated — save to go live</div>
     </div>
   </div>
 
@@ -380,6 +389,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 <script>
 let currentFile = 'index.html';
 let isBusy = false;
+let showingCode = false;
 
 // ── Tab switching ─────────────────────────────────────────────────────────────
 document.querySelectorAll('.tab').forEach(tab => {
@@ -388,10 +398,31 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
     currentFile = tab.dataset.file;
-    document.getElementById('editor-file-label').textContent = currentFile;
     loadFile(currentFile);
   });
 });
+
+// ── Toggle code view ─────────────────────────────────────────────────────────
+function toggleCode() {
+  showingCode = !showingCode;
+  const editor = document.getElementById('code-editor');
+  const iframe = document.getElementById('preview-iframe');
+  const btn = document.getElementById('btn-toggle-code');
+  const label = document.getElementById('editor-file-label');
+  if (showingCode) {
+    editor.style.display = 'block';
+    iframe.style.display = 'none';
+    btn.classList.add('active');
+    btn.textContent = '⊠ Hide Code';
+    label.textContent = currentFile;
+  } else {
+    editor.style.display = 'none';
+    iframe.style.display = 'block';
+    btn.classList.remove('active');
+    btn.innerHTML = '<\/> View Code';
+    label.textContent = 'Live Preview';
+  }
+}
 
 // ── Load file ─────────────────────────────────────────────────────────────────
 async function loadFile(file) {
@@ -399,6 +430,34 @@ async function loadFile(file) {
   editor.value = 'Loading…';
   const data = await api({ action: 'get_file', file });
   editor.value = data.content ?? '';
+  if (showingCode) {
+    document.getElementById('editor-file-label').textContent = file;
+  }
+}
+
+// ── Update live preview ───────────────────────────────────────────────────────
+async function updatePreview(updatedFile, updatedContent) {
+  const iframe = document.getElementById('preview-iframe');
+  // Get the current HTML (may need to fetch if we're editing CSS/JS)
+  let html = '';
+  if (updatedFile === 'index.html') {
+    html = updatedContent;
+  } else {
+    const data = await api({ action: 'get_file', file: 'index.html' });
+    html = data.content ?? '';
+  }
+  // Inject base tag so relative URLs (style.css, script.js) load from live server
+  const base = `<base href="${window.location.origin}/">`;
+  // If editing CSS, replace the stylesheet link with an inline style block
+  if (updatedFile === 'style.css') {
+    html = html.replace(/<link[^>]*stylesheet[^>]*>/i, `<style>${updatedContent}</style>`);
+  }
+  html = html.replace('<head>', `<head>\n  ${base}`);
+  iframe.srcdoc = html;
+  // Show "preview updated" badge
+  const badge = document.getElementById('preview-pending');
+  badge.classList.add('show');
+  setTimeout(() => badge.classList.remove('show'), 3000);
 }
 
 // ── Ask AI ────────────────────────────────────────────────────────────────────
@@ -420,7 +479,8 @@ async function askAI() {
     addMsg('Error: ' + data.error, 'ai error');
   } else {
     document.getElementById('code-editor').value = data.content;
-    addMsg('Done! The editor has been updated. Review the changes and hit Save when ready.', 'ai success');
+    await updatePreview(currentFile, data.content);
+    addMsg('Done! Preview updated — hit Save to push it live.', 'ai success');
   }
   setBusy(false);
 }
@@ -437,7 +497,13 @@ async function saveFile() {
   const data = await api({ action: 'save', file: currentFile, content });
   setBusy(false);
   if (data.ok) {
-    showToast('Saved! Backup: ' + data.backup, 'ok');
+    showToast('Saved! Going live…', 'ok');
+    // Reload iframe from live server after a brief delay
+    setTimeout(() => {
+      const iframe = document.getElementById('preview-iframe');
+      iframe.removeAttribute('srcdoc');
+      iframe.src = '/?' + Date.now(); // cache bust
+    }, 800);
   } else {
     showToast('Save failed: ' + (data.error ?? 'Unknown error'), 'err');
   }
@@ -481,8 +547,9 @@ async function restoreBackup(backup) {
     return;
   }
   document.getElementById('code-editor').value = data.content;
+  await updatePreview(currentFile, data.content);
   closeHistory();
-  showToast('Backup loaded into editor. Hit Save to apply.', 'ok');
+  showToast('Backup loaded — preview updated. Hit Save to apply.', 'ok');
 }
 
 document.getElementById('history-modal').addEventListener('click', e => {
@@ -538,7 +605,10 @@ function formatBackupDate(b) {
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
+// Pre-load the current file into the hidden editor so AI has content to work with
 loadFile('index.html');
+// Hide code editor by default (preview iframe is shown)
+document.getElementById('code-editor').style.display = 'none';
 </script>
 </body>
 </html>
