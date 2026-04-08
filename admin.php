@@ -138,12 +138,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $ext  = pathinfo($file, PATHINFO_EXTENSION);
         $lang = match($ext) { 'html' => 'HTML', 'css' => 'CSS', 'js' => 'JavaScript', default => $ext };
 
-        $system_prompt = "You are an expert web developer editing a chiropractic practice website. "
-            . "The user will describe a change they want made to a $lang file. "
-            . "You MUST return ONLY the complete updated file content — no explanation, no markdown code fences, no commentary before or after. "
-            . "Just the raw $lang content, complete and ready to save.";
+        // Give AI context about the full site structure
+        $other_files = array_filter(SITE_FILES, fn($f) => $f !== $file);
+        $file_list   = implode(', ', array_values($other_files));
+        $is_new      = empty(trim($content));
 
-        $user_message = "Current $lang file ($file):\n\n$content\n\n---\nRequested change: $request\n\nReturn ONLY the complete updated $lang file.";
+        $system_prompt = "You are an expert web developer editing a chiropractic practice website. "
+            . "The site consists of these files: $file_list, plus the file you are editing: $file. "
+            . "Rules you MUST follow:\n"
+            . "1. Return ONLY the raw file content — no explanation, no markdown fences, no commentary.\n"
+            . "2. You are editing ONLY $file. Do not reference or modify any other file.\n"
+            . "3. All HTML pages must link to style.css and script.js with relative paths.\n"
+            . "4. Pages other than index.html must include navigation with a Home link back to index.html.\n"
+            . "5. Never replace or duplicate index.html — each HTML file is a separate standalone page.\n"
+            . "6. Match the existing site's fonts (Playfair Display, Inter), colors (#1a4f72 primary, #2980b9 accent), and layout conventions.";
+
+        $context      = $is_new
+            ? "This is a brand new empty file. Create it from scratch, matching the site's existing style."
+            : "Current content of $file:\n\n$content";
+
+        $user_message = "$context\n\n---\nRequest: $request\n\nReturn ONLY the complete $lang content for $file.";
 
         $payload = json_encode([
             'model'      => 'claude-opus-4-5',
@@ -387,7 +401,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
       </div>
     </div>
     <div class="editor-area">
-      <iframe class="preview-iframe" id="preview-iframe" src="/"></iframe>
+      <iframe class="preview-iframe" id="preview-iframe" src="/index.html"></iframe>
       <textarea class="code-editor" id="code-editor" spellcheck="false"></textarea>
       <div class="preview-pending" id="preview-pending">Preview updated — save to go live</div>
     </div>
@@ -524,7 +538,7 @@ async function saveFile() {
     setTimeout(() => {
       const iframe = document.getElementById('preview-iframe');
       iframe.removeAttribute('srcdoc');
-      iframe.src = '/?' + Date.now(); // cache bust
+      iframe.src = '/' + currentFile + '?' + Date.now(); // load correct page, cache bust
     }, 800);
   } else {
     showToast('Save failed: ' + (data.error ?? 'Unknown error'), 'err');
@@ -655,7 +669,17 @@ function switchTab(tab, file) {
   tab.classList.add('active');
   currentFile = file;
   loadFile(file);
-  if (!showingCode) document.getElementById('editor-file-label').textContent = 'Live Preview';
+  if (!showingCode) {
+    document.getElementById('editor-file-label').textContent = 'Live Preview';
+  } else {
+    document.getElementById('editor-file-label').textContent = file;
+  }
+  // Point preview at the correct page
+  if (file.endsWith('.html')) {
+    const iframe = document.getElementById('preview-iframe');
+    iframe.removeAttribute('srcdoc');
+    iframe.src = '/' + file + '?' + Date.now();
+  }
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
