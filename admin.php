@@ -790,7 +790,7 @@ let isBusy = false;
 let showingCode = false;
 
 // ── Tab switching ─────────────────────────────────────────────────────────────
-document.querySelectorAll('.tab:not(.tab-new)').forEach(tab => {
+document.querySelectorAll('.tab:not(.tab-new):not(.tab-images)').forEach(tab => {
   tab.addEventListener('click', () => switchTab(tab, tab.dataset.file));
 });
 
