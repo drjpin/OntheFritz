@@ -15,7 +15,82 @@ define(\'ANTHROPIC_API_KEY\', \'sk-ant-...\');
 require_once $config_file;
 
 define('CORE_FILES', ['index.php', 'nav.php', 'footer.php', 'style.css', 'script.js']);
-define('BACKUP_DIR', __DIR__ . '/backups');
+define('BACKUP_DIR',    __DIR__ . '/backups');
+define('IMAGES_DIR',    __DIR__ . '/images');
+define('IMAGES_MANIFEST', __DIR__ . '/images.json');
+
+// ── Image helpers ──────────────────────────────────────────────────────────────
+
+function resizeImage($src_path, $dest_path, $max_w = 1800) {
+    $info = @getimagesize($src_path);
+    if (!$info) return false;
+    [$w, $h, $type] = $info;
+    if ($w > $max_w) {
+        $ratio = $max_w / $w;
+        $nw = $max_w; $nh = (int)($h * $ratio);
+    } else {
+        $nw = $w; $nh = $h;
+    }
+    $src = match($type) {
+        IMAGETYPE_JPEG => imagecreatefromjpeg($src_path),
+        IMAGETYPE_PNG  => imagecreatefrompng($src_path),
+        IMAGETYPE_WEBP => imagecreatefromwebp($src_path),
+        IMAGETYPE_GIF  => imagecreatefromgif($src_path),
+        default        => false,
+    };
+    if (!$src) return false;
+    $dst = imagecreatetruecolor($nw, $nh);
+    // White background so transparent PNGs look right as JPEG
+    imagefill($dst, 0, 0, imagecolorallocate($dst, 255, 255, 255));
+    imagecopyresampled($dst, $src, 0, 0, 0, 0, $nw, $nh, $w, $h);
+    // Re-encode as JPEG — this strips all EXIF data
+    $ok = imagejpeg($dst, $dest_path, 85);
+    imagedestroy($src);
+    imagedestroy($dst);
+    return $ok ? [$nw, $nh] : false;
+}
+
+function generateAltText($image_path) {
+    $data = base64_encode(file_get_contents($image_path));
+    $payload = json_encode([
+        'model'      => 'claude-opus-4-5',
+        'max_tokens' => 150,
+        'messages'   => [[
+            'role'    => 'user',
+            'content' => [
+                ['type' => 'image', 'source' => ['type' => 'base64', 'media_type' => 'image/jpeg', 'data' => $data]],
+                ['type' => 'text',  'text'   => 'Write a concise, descriptive alt text for this image for a chiropractic website. Keep it under 125 characters. Return ONLY the alt text — no quotes, no explanation.'],
+            ],
+        ]],
+    ]);
+    $ch = curl_init('https://api.anthropic.com/v1/messages');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $payload,
+        CURLOPT_TIMEOUT        => 60,
+        CURLOPT_HTTPHEADER     => [
+            'Content-Type: application/json',
+            'x-api-key: ' . ANTHROPIC_API_KEY,
+            'anthropic-version: 2023-06-01',
+        ],
+    ]);
+    $resp = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if (!$resp || $code !== 200) return '';
+    $d = json_decode($resp, true);
+    return trim($d['content'][0]['text'] ?? '');
+}
+
+function getImagesManifest() {
+    if (!file_exists(IMAGES_MANIFEST)) return [];
+    return json_decode(file_get_contents(IMAGES_MANIFEST), true) ?? [];
+}
+
+function saveImagesManifest($data) {
+    file_put_contents(IMAGES_MANIFEST, json_encode($data, JSON_PRETTY_PRINT));
+}
 
 // Dynamically include any extra .php page files and leftover .html files
 function getSiteFiles() {
@@ -345,6 +420,83 @@ PHP;
         exit;
     }
 
+    // upload_image
+    if ($action === 'upload_image') {
+        set_time_limit(0);
+        if (!isset($_FILES['image']) || $_FILES['image']['error'] !== UPLOAD_ERR_OK) {
+            echo json_encode(['error' => 'Upload failed — no file received']); exit;
+        }
+        $f       = $_FILES['image'];
+        $allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+        if (!in_array($f['type'], $allowed, true)) {
+            echo json_encode(['error' => 'Only JPEG, PNG, WebP, or GIF allowed']); exit;
+        }
+        if (!is_dir(IMAGES_DIR)) mkdir(IMAGES_DIR, 0755, true);
+
+        // Slugify filename
+        $slug = strtolower(trim(pathinfo($f['name'], PATHINFO_FILENAME)));
+        $slug = preg_replace('/[\s_]+/', '-', $slug);
+        $slug = preg_replace('/[^a-z0-9\-]/', '', $slug);
+        $slug = trim($slug, '-') ?: 'image';
+
+        // Avoid collisions
+        $dest_name = $slug . '.jpg';
+        $n = 1;
+        while (file_exists(IMAGES_DIR . '/' . $dest_name)) $dest_name = $slug . '-' . $n++ . '.jpg';
+
+        $dest = IMAGES_DIR . '/' . $dest_name;
+        $dims = resizeImage($f['tmp_name'], $dest);
+        if (!$dims) { echo json_encode(['error' => 'Image processing failed — GD library may be missing']); exit; }
+
+        $alt      = generateAltText($dest);
+        $manifest = getImagesManifest();
+        $manifest[$dest_name] = ['alt' => $alt, 'uploaded' => date('Y-m-d'), 'width' => $dims[0], 'height' => $dims[1]];
+        saveImagesManifest($manifest);
+
+        echo json_encode(['ok' => true, 'file' => $dest_name, 'alt' => $alt, 'width' => $dims[0], 'height' => $dims[1]]);
+        exit;
+    }
+
+    // list_images
+    if ($action === 'list_images') {
+        $manifest = getImagesManifest();
+        $images   = [];
+        foreach ($manifest as $name => $meta) {
+            if (file_exists(IMAGES_DIR . '/' . $name)) {
+                $images[] = ['file' => $name, 'alt' => $meta['alt'] ?? '', 'uploaded' => $meta['uploaded'] ?? '', 'width' => $meta['width'] ?? 0, 'height' => $meta['height'] ?? 0];
+            }
+        }
+        usort($images, fn($a, $b) => strcmp($b['uploaded'], $a['uploaded']));
+        echo json_encode(['images' => $images]);
+        exit;
+    }
+
+    // save_alt_text
+    if ($action === 'save_alt_text') {
+        $file     = $_POST['file'] ?? '';
+        $alt      = trim($_POST['alt'] ?? '');
+        $manifest = getImagesManifest();
+        if (!isset($manifest[$file])) { echo json_encode(['error' => 'Image not found']); exit; }
+        $manifest[$file]['alt'] = $alt;
+        saveImagesManifest($manifest);
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+
+    // delete_image
+    if ($action === 'delete_image') {
+        $file     = $_POST['file'] ?? '';
+        $manifest = getImagesManifest();
+        if (isset($manifest[$file])) {
+            $path = IMAGES_DIR . '/' . $file;
+            if (file_exists($path)) unlink($path);
+            unset($manifest[$file]);
+            saveImagesManifest($manifest);
+        }
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+
     echo json_encode(['error' => 'Unknown action']);
     exit;
 }
@@ -446,6 +598,62 @@ PHP;
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
     ::-webkit-scrollbar-thumb:hover { background: #484f58; }
+
+    /* ── Images Tab ── */
+    .tab-images { border-left: 1px solid #30363d !important; margin-left: 8px; padding-left: 18px !important; }
+
+    /* ── Images Panel ── */
+    .images-panel { grid-column: 2; grid-row: 1; flex-direction: column; overflow: hidden; }
+    .images-toolbar { padding: 10px 16px; border-bottom: 1px solid #30363d; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; background: #161b22; gap: 12px; }
+    .images-toolbar-title { font-size: 13px; font-weight: 600; color: #8b949e; }
+    .images-toolbar-hint { font-size: 12px; color: #484f58; }
+    .images-body { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+
+    /* Upload zone */
+    .upload-zone { border: 2px dashed #30363d; border-radius: 10px; padding: 32px 20px; text-align: center; cursor: pointer; transition: all 0.2s; background: #0d1117; flex-shrink: 0; }
+    .upload-zone:hover, .upload-zone.drag-over { border-color: #388bfd; background: rgba(31,111,235,0.05); }
+    .upload-zone-icon { font-size: 32px; margin-bottom: 10px; }
+    .upload-zone-title { font-size: 15px; font-weight: 600; color: #e6edf3; margin-bottom: 6px; }
+    .upload-zone-sub { font-size: 12px; color: #8b949e; }
+    .upload-progress { margin-top: 14px; display: none; }
+    .upload-progress-bar { width: 100%; height: 4px; background: #21262d; border-radius: 2px; overflow: hidden; }
+    .upload-progress-fill { height: 100%; background: #388bfd; border-radius: 2px; transition: width 0.35s ease; width: 0%; }
+
+    /* Gallery */
+    .images-gallery-header { display: flex; align-items: center; }
+    .images-gallery-title { font-size: 11px; font-weight: 700; color: #484f58; letter-spacing: 1.5px; text-transform: uppercase; }
+    .images-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+    .image-card { background: #161b22; border: 2px solid #30363d; border-radius: 8px; overflow: hidden; transition: all 0.2s; cursor: pointer; }
+    .image-card:hover { border-color: #58a6ff; }
+    .image-card.selected { border-color: #388bfd; box-shadow: 0 0 0 3px rgba(56,139,253,0.25); }
+    .image-card-thumb { width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; background: #0d1117; }
+    .image-card-body { padding: 10px; }
+    .image-card-name { font-size: 11px; font-family: monospace; color: #e6edf3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 5px; }
+    .image-card-alt { font-size: 11px; color: #8b949e; line-height: 1.4; margin-bottom: 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 30px; }
+    .image-card-actions { display: flex; gap: 6px; }
+    .btn-edit-alt { flex: 1; padding: 4px 6px; background: none; border: 1px solid #30363d; border-radius: 4px; color: #8b949e; font-size: 11px; cursor: pointer; transition: all 0.15s; }
+    .btn-edit-alt:hover { color: #e6edf3; border-color: #8b949e; }
+    .btn-delete-img { padding: 4px 8px; background: none; border: 1px solid #30363d; border-radius: 4px; color: #8b949e; font-size: 11px; cursor: pointer; transition: all 0.15s; }
+    .btn-delete-img:hover { color: #f85149; border-color: #f85149; }
+
+    /* Alt text edit modal */
+    .alt-modal-box { background: #161b22; border: 1px solid #30363d; border-radius: 12px; width: 460px; max-width: 95vw; padding: 24px; }
+    .alt-modal-box h3 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+    .alt-modal-box .alt-modal-sub { font-size: 13px; color: #8b949e; margin-bottom: 16px; }
+    .alt-modal-preview { width: 100%; border-radius: 6px; margin-bottom: 16px; max-height: 180px; object-fit: cover; display: block; }
+    .alt-modal-textarea { width: 100%; padding: 10px 12px; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; font-size: 14px; font-family: inherit; resize: vertical; outline: none; min-height: 72px; transition: border-color 0.2s; line-height: 1.5; }
+    .alt-modal-textarea:focus { border-color: #388bfd; }
+    .alt-char-count { font-size: 11px; color: #8b949e; margin-top: 4px; text-align: right; }
+    .alt-modal-actions { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
+    .btn-alt-cancel { padding: 7px 16px; background: none; border: 1px solid #30363d; border-radius: 6px; color: #8b949e; font-size: 13px; cursor: pointer; }
+    .btn-alt-cancel:hover { color: #e6edf3; }
+    .btn-alt-save { padding: 7px 20px; background: #238636; border: none; border-radius: 6px; color: #fff; font-size: 13px; font-weight: 700; cursor: pointer; }
+    .btn-alt-save:hover { background: #2ea043; }
+
+    /* Selected image context hint */
+    .selected-image-hint { padding: 8px 12px; background: rgba(56,139,253,0.08); border: 1px solid rgba(56,139,253,0.25); border-radius: 6px; font-size: 11px; color: #79c0ff; line-height: 1.4; display: none; margin-top: 6px; }
+    .selected-image-hint.show { display: block; }
+    .selected-image-hint strong { color: #58a6ff; }
   </style>
 </head>
 <body>
@@ -458,6 +666,7 @@ PHP;
     <button class="tab <?= $i === 0 ? 'active' : '' ?>" data-file="<?= htmlspecialchars($f) ?>"><?= htmlspecialchars($f) ?></button>
     <?php endforeach; ?>
     <button class="tab tab-new" onclick="newPage()" title="Add a new page">+ Page</button>
+    <button class="tab tab-images" id="tab-images" onclick="toggleImagesMode()" title="Manage images">📷 Images</button>
   </div>
   <div class="topbar-right">
     <a href="../" target="_blank" style="font-size:13px;color:#8b949e;text-decoration:none;padding:5px 10px;border:1px solid #30363d;border-radius:6px;">View Site ↗</a>
@@ -482,11 +691,42 @@ PHP;
         <button class="btn-ask" id="btn-ask" onclick="askAI()">Ask AI</button>
       </div>
       <div class="ai-hint">Changes will appear in the editor. <strong>Review then Save.</strong></div>
+      <div class="selected-image-hint" id="selected-image-hint"></div>
+    </div>
+  </div>
+
+  <!-- Images Panel (shown when Images tab active) -->
+  <div class="images-panel" id="images-panel" style="display:none">
+    <div class="images-toolbar">
+      <span class="images-toolbar-title">📷 Image Library</span>
+      <span class="images-toolbar-hint">Select an image, then ask the AI to insert it on any page</span>
+    </div>
+    <div class="images-body">
+
+      <!-- Upload zone -->
+      <div class="upload-zone" id="upload-zone">
+        <div class="upload-zone-icon">⬆️</div>
+        <div class="upload-zone-title">Drop an image here, or click to upload</div>
+        <div class="upload-zone-sub">JPEG · PNG · WebP · GIF &nbsp;·&nbsp; Auto-resized to max 1800px &nbsp;·&nbsp; EXIF stripped &nbsp;·&nbsp; AI alt text generated</div>
+        <div class="upload-progress" id="upload-progress">
+          <div class="upload-progress-bar"><div class="upload-progress-fill" id="upload-progress-fill"></div></div>
+        </div>
+      </div>
+      <input type="file" id="upload-input" accept="image/*" style="display:none">
+
+      <!-- Gallery -->
+      <div class="images-gallery-header">
+        <div class="images-gallery-title">Uploaded Images</div>
+      </div>
+      <div class="images-grid" id="images-gallery">
+        <div style="grid-column:1/-1;color:#8b949e;font-size:14px;padding:12px 0;">Loading…</div>
+      </div>
+
     </div>
   </div>
 
   <!-- Editor Panel -->
-  <div class="editor-panel">
+  <div class="editor-panel" id="editor-panel">
     <div class="editor-toolbar">
       <span class="editor-file-label" id="editor-file-label">Live Preview</span>
       <div class="editor-actions">
@@ -516,6 +756,21 @@ PHP;
       <div class="backup-list" id="backup-list">
         <div class="no-backups">Loading...</div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Alt Text Edit Modal -->
+<div class="modal-overlay" id="alt-modal-overlay">
+  <div class="alt-modal-box">
+    <h3>Edit Alt Text</h3>
+    <p class="alt-modal-sub">Alt text helps search engines and screen readers understand the image.</p>
+    <img class="alt-modal-preview" id="alt-modal-img" src="" alt="">
+    <textarea class="alt-modal-textarea" id="alt-modal-textarea" maxlength="200" placeholder="Describe the image clearly and concisely…" oninput="document.getElementById('alt-char-count').textContent=this.value.length+'/125 chars'"></textarea>
+    <div class="alt-char-count" id="alt-char-count">0/125 chars</div>
+    <div class="alt-modal-actions">
+      <button class="btn-alt-cancel" onclick="closeAltModal()">Cancel</button>
+      <button class="btn-alt-save" id="alt-modal-save">Save Alt Text</button>
     </div>
   </div>
 </div>
@@ -605,11 +860,16 @@ async function updatePreview(updatedFile, updatedContent) {
 // ── Ask AI ────────────────────────────────────────────────────────────────────
 async function askAI() {
   const input = document.getElementById('ai-input');
-  const request = input.value.trim();
+  let request = input.value.trim();
   if (!request || isBusy) return;
 
+  // If an image is selected, append it as context so the AI can insert the right tag
+  if (selectedImage) {
+    request += `\n\n[Insert image: src="/images/${selectedImage.file}" alt="${selectedImage.alt}"]`;
+  }
+
   setBusy(true);
-  addMsg(request, 'user');
+  addMsg(input.value.trim(), 'user');
   const thinking = addMsg('Thinking…', 'ai thinking');
   input.value = '';
 
@@ -778,7 +1038,8 @@ async function newPage() {
 
 function switchTab(tab, file) {
   if (isBusy) return;
-  document.querySelectorAll('.tab:not(.tab-new)').forEach(t => t.classList.remove('active'));
+  if (inImagesMode) exitImagesMode();
+  document.querySelectorAll('.tab:not(.tab-new):not(.tab-images)').forEach(t => t.classList.remove('active'));
   tab.classList.add('active');
   currentFile = file;
   loadFile(file);
@@ -793,9 +1054,193 @@ function switchTab(tab, file) {
   iframe.src = '/' + getPreviewFile(file) + '?' + Date.now();
 }
 
+// ── Images Mode ───────────────────────────────────────────────────────────────
+let inImagesMode = false;
+let selectedImage = null;
+
+function toggleImagesMode() {
+  inImagesMode ? exitImagesMode() : enterImagesMode();
+}
+
+function enterImagesMode() {
+  inImagesMode = true;
+  document.getElementById('images-panel').style.display = 'flex';
+  document.getElementById('editor-panel').style.display = 'none';
+  document.getElementById('tab-images').classList.add('active');
+  document.querySelectorAll('.tab:not(.tab-new):not(.tab-images)').forEach(t => t.classList.remove('active'));
+  loadImages();
+  setupUploadZone();
+}
+
+function exitImagesMode() {
+  inImagesMode = false;
+  document.getElementById('images-panel').style.display = 'none';
+  document.getElementById('editor-panel').style.display = 'flex';
+  document.getElementById('tab-images').classList.remove('active');
+  // Re-activate current file tab
+  document.querySelectorAll('.tab:not(.tab-new):not(.tab-images)').forEach(t => {
+    t.classList.toggle('active', t.dataset.file === currentFile);
+  });
+}
+
+// ── Image Gallery ─────────────────────────────────────────────────────────────
+async function loadImages() {
+  const gallery = document.getElementById('images-gallery');
+  gallery.innerHTML = '<div style="grid-column:1/-1;color:#8b949e;font-size:14px;padding:12px 0;">Loading…</div>';
+  const data = await api({ action: 'list_images' });
+  if (!data.images || data.images.length === 0) {
+    gallery.innerHTML = '<div style="grid-column:1/-1;color:#8b949e;font-size:14px;padding:20px 0;text-align:center;">No images yet — upload your first one above!</div>';
+    return;
+  }
+  gallery.innerHTML = '';
+  data.images.forEach(img => addImageCard(img));
+}
+
+function addImageCard(img) {
+  const gallery = document.getElementById('images-gallery');
+  const card = document.createElement('div');
+  card.className = 'image-card';
+  card.dataset.file = img.file;
+  card.dataset.alt  = img.alt;
+  card.innerHTML = `
+    <img class="image-card-thumb" src="/images/${esc(img.file)}?v=${Date.now()}" alt="${esc(img.alt)}" loading="lazy">
+    <div class="image-card-body">
+      <div class="image-card-name">${esc(img.file)}</div>
+      <div class="image-card-alt">${esc(img.alt) || '<em style="opacity:0.5">no alt text</em>'}</div>
+      <div class="image-card-actions">
+        <button class="btn-edit-alt" onclick="openAltModal('${esc(img.file)}',this.closest('.image-card'))">Edit Alt</button>
+        <button class="btn-delete-img" onclick="deleteImage('${esc(img.file)}',this.closest('.image-card'))">✕</button>
+      </div>
+    </div>`;
+  card.addEventListener('click', e => {
+    if (e.target.tagName === 'BUTTON') return;
+    selectImage(img.file, card.dataset.alt, card);
+  });
+  gallery.appendChild(card);
+}
+
+function selectImage(file, alt, card) {
+  selectedImage = { file, alt };
+  document.querySelectorAll('.image-card').forEach(c => c.classList.remove('selected'));
+  card.classList.add('selected');
+  const hint = document.getElementById('selected-image-hint');
+  hint.innerHTML = `📷 <strong>${esc(file)}</strong> selected — switch to a page tab and tell the AI where to add it.`;
+  hint.classList.add('show');
+}
+
+// ── Alt Text Modal ────────────────────────────────────────────────────────────
+function openAltModal(file, card) {
+  const currentAlt = card.dataset.alt;
+  document.getElementById('alt-modal-img').src = '/images/' + file + '?v=' + Date.now();
+  document.getElementById('alt-modal-textarea').value = currentAlt;
+  document.getElementById('alt-char-count').textContent = currentAlt.length + '/125 chars';
+  document.getElementById('alt-modal-save').onclick = async () => {
+    const newAlt = document.getElementById('alt-modal-textarea').value.trim();
+    const data   = await api({ action: 'save_alt_text', file, alt: newAlt });
+    if (data.error) { showToast('Failed: ' + data.error, 'err'); return; }
+    card.dataset.alt = newAlt;
+    card.querySelector('.image-card-alt').innerHTML = newAlt ? esc(newAlt) : '<em style="opacity:0.5">no alt text</em>';
+    if (selectedImage && selectedImage.file === file) {
+      selectedImage.alt = newAlt;
+      document.getElementById('selected-image-hint').innerHTML = `📷 <strong>${esc(file)}</strong> selected — switch to a page tab and tell the AI where to add it.`;
+    }
+    closeAltModal();
+    showToast('Alt text saved!', 'ok');
+  };
+  document.getElementById('alt-modal-overlay').classList.add('open');
+}
+
+function closeAltModal() {
+  document.getElementById('alt-modal-overlay').classList.remove('open');
+}
+
+document.getElementById('alt-modal-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('alt-modal-overlay')) closeAltModal();
+});
+
+// ── Delete image ──────────────────────────────────────────────────────────────
+async function deleteImage(file, card) {
+  if (!confirm(`Delete "${file}"? This cannot be undone.`)) return;
+  const data = await api({ action: 'delete_image', file });
+  if (!data.ok) { showToast('Delete failed', 'err'); return; }
+  card.remove();
+  if (selectedImage && selectedImage.file === file) {
+    selectedImage = null;
+    document.getElementById('selected-image-hint').classList.remove('show');
+  }
+  showToast('Image deleted.', 'ok');
+}
+
+// ── Upload ────────────────────────────────────────────────────────────────────
+let uploadZoneReady = false;
+function setupUploadZone() {
+  if (uploadZoneReady) return;
+  uploadZoneReady = true;
+  const zone  = document.getElementById('upload-zone');
+  const input = document.getElementById('upload-input');
+
+  zone.addEventListener('click', () => input.click());
+  zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    if (e.dataTransfer.files.length) uploadFile(e.dataTransfer.files[0]);
+  });
+  input.addEventListener('change', () => {
+    if (input.files.length) uploadFile(input.files[0]);
+    input.value = '';
+  });
+}
+
+async function uploadFile(file) {
+  const ok = ['image/jpeg','image/png','image/webp','image/gif'];
+  if (!ok.includes(file.type)) { showToast('Please upload a JPEG, PNG, WebP, or GIF image.', 'err'); return; }
+
+  const progress = document.getElementById('upload-progress');
+  const fill     = document.getElementById('upload-progress-fill');
+  progress.style.display = 'block';
+  fill.style.width = '8%';
+
+  const form = new FormData();
+  form.append('action', 'upload_image');
+  form.append('image', file);
+
+  // Fake progress to show activity during resize + AI alt text generation
+  let pct = 8;
+  const tick = setInterval(() => { pct = Math.min(pct + 10, 80); fill.style.width = pct + '%'; }, 600);
+
+  try {
+    const res  = await fetch('admin.php', { method: 'POST', body: form });
+    const data = await res.json();
+    clearInterval(tick);
+    fill.style.width = '100%';
+    setTimeout(() => { progress.style.display = 'none'; fill.style.width = '0%'; }, 700);
+
+    if (data.error) {
+      showToast('Upload failed: ' + data.error, 'err');
+    } else {
+      // Remove "no images" placeholder if present
+      const placeholder = document.querySelector('#images-gallery div[style*="grid-column"]');
+      if (placeholder) placeholder.remove();
+      addImageCard({ file: data.file, alt: data.alt, uploaded: new Date().toISOString().slice(0,10), width: data.width, height: data.height });
+      showToast('Uploaded! AI suggested alt text — review it in the gallery.', 'ok');
+    }
+  } catch(e) {
+    clearInterval(tick);
+    progress.style.display = 'none';
+    showToast('Upload failed: ' + e.message, 'err');
+  }
+}
+
+// ── Utility ───────────────────────────────────────────────────────────────────
+function esc(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 // Pre-load the current file into the hidden editor so AI has content to work with
-loadFile('index.html');
+loadFile('index.php');
 // Hide code editor by default (preview iframe is shown)
 document.getElementById('code-editor').style.display = 'none';
 </script>
