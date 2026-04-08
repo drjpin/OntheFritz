@@ -126,6 +126,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
     // ai_edit
     if ($action === 'ai_edit') {
+        set_time_limit(0); // Remove PHP execution time limit for AI requests
         $file    = $_POST['file']    ?? '';
         $content = $_POST['content'] ?? '';
         $request = trim($_POST['request'] ?? '');
@@ -156,7 +157,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST           => true,
             CURLOPT_POSTFIELDS     => $payload,
-            CURLOPT_TIMEOUT        => 90,
+            CURLOPT_TIMEOUT        => 180,
             CURLOPT_HTTPHEADER     => [
                 'Content-Type: application/json',
                 'x-api-key: ' . ANTHROPIC_API_KEY,
