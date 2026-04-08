@@ -248,7 +248,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
     // new_page — create a pre-scaffolded html file with nav/footer already in place
     if ($action === 'new_page') {
-        $name = preg_replace('/[^a-z0-9\-]/', '', strtolower($_POST['name'] ?? ''));
+        $raw  = strtolower(trim($_POST['name'] ?? ''));
+        $name = preg_replace('/[\s_]+/', '-', $raw);        // spaces/underscores → dashes
+        $name = preg_replace('/[^a-z0-9\-]/', '', $name);  // strip everything else
+        $name = trim($name, '-');                           // clean leading/trailing dashes
         if (!$name) { echo json_encode(['error' => 'Invalid page name']); exit; }
         $filename = $name . '.php';
         if (in_array($filename, CORE_FILES, true)) { echo json_encode(['error' => 'Cannot overwrite a core file']); exit; }
@@ -519,25 +522,36 @@ async function loadFile(file) {
 
 // ── Update live preview ───────────────────────────────────────────────────────
 async function updatePreview(updatedFile, updatedContent) {
-  const iframe = document.getElementById('preview-iframe');
-  // Get the current HTML (may need to fetch if we're editing CSS/JS)
-  let html = '';
-  if (updatedFile === 'index.html') {
-    html = updatedContent;
-  } else {
-    const data = await api({ action: 'get_file', file: 'index.html' });
-    html = data.content ?? '';
+  const iframe  = document.getElementById('preview-iframe');
+  const badge   = document.getElementById('preview-pending');
+  const isPhpPage = updatedFile.endsWith('.php') && !['nav.php','footer.php'].includes(updatedFile);
+
+  // PHP page files can't be previewed via srcdoc (PHP won't execute inside it)
+  // Just update the badge and let the save reload the live iframe
+  if (isPhpPage) {
+    badge.textContent = 'Changes ready — save to preview';
+    badge.classList.add('show');
+    setTimeout(() => badge.classList.remove('show'), 4000);
+    return;
   }
-  // Inject base tag so relative URLs (style.css, script.js) load from live server
+
+  // For CSS: inject into the live index.php HTML
+  // For nav.php, footer.php, style.css, script.js: preview against index.php
+  let html = '';
+  const data = await api({ action: 'get_file', file: 'index.php' });
+  html = data.content ?? '';
+
+  // Strip PHP tags so srcdoc doesn't show them as text
+  html = html.replace(/<\?php[^?]*\?>/g, '');
+
   const base = `<base href="${window.location.origin}/">`;
-  // If editing CSS, replace the stylesheet link with an inline style block
   if (updatedFile === 'style.css') {
     html = html.replace(/<link[^>]*stylesheet[^>]*>/i, `<style>${updatedContent}</style>`);
   }
   html = html.replace('<head>', `<head>\n  ${base}`);
   iframe.srcdoc = html;
-  // Show "preview updated" badge
-  const badge = document.getElementById('preview-pending');
+
+  badge.textContent = 'Preview updated — save to go live';
   badge.classList.add('show');
   setTimeout(() => badge.classList.remove('show'), 3000);
 }
@@ -695,9 +709,9 @@ function getPreviewFile(file) {
 
 // ── New page ──────────────────────────────────────────────────────────────────
 async function newPage() {
-  const name = prompt('Page name (e.g. "blog", "about", "services"):');
+  const name = prompt('Page name — use words or phrases, spaces are fine:\ne.g. "back pain", "herniated disc", "about us"');
   if (!name) return;
-  const clean = name.toLowerCase().replace(/[^a-z0-9\-]/g, '');
+  const clean = name.toLowerCase().trim().replace(/[\s_]+/g, '-').replace(/[^a-z0-9\-]/g, '').replace(/^-+|-+$/g, '');
   if (!clean) { showToast('Invalid name', 'err'); return; }
   const data = await api({ action: 'new_page', name: clean });
   if (data.error) { showToast(data.error, 'err'); return; }
