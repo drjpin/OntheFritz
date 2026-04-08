@@ -14,8 +14,20 @@ define(\'ANTHROPIC_API_KEY\', \'sk-ant-...\');
 }
 require_once $config_file;
 
-define('SITE_FILES', ['index.html', 'style.css', 'script.js']);
+define('CORE_FILES', ['index.html', 'style.css', 'script.js']);
 define('BACKUP_DIR', __DIR__ . '/backups');
+
+// Dynamically include any extra .html pages (blog.html, about.html, etc.)
+function getSiteFiles() {
+    $files = CORE_FILES;
+    $extra = glob(__DIR__ . '/*.html');
+    foreach ($extra as $f) {
+        $name = basename($f);
+        if (!in_array($name, $files, true)) $files[] = $name;
+    }
+    return $files;
+}
+define('SITE_FILES', getSiteFiles());
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
@@ -211,6 +223,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         exit;
     }
 
+    // new_page — create a blank html file so it appears in the tab list
+    if ($action === 'new_page') {
+        $name = preg_replace('/[^a-z0-9\-]/', '', strtolower($_POST['name'] ?? ''));
+        if (!$name) { echo json_encode(['error' => 'Invalid page name']); exit; }
+        $filename = $name . '.html';
+        if (in_array($filename, CORE_FILES, true)) { echo json_encode(['error' => 'Cannot overwrite a core file']); exit; }
+        $path = __DIR__ . '/' . $filename;
+        if (!file_exists($path)) file_put_contents($path, '');
+        echo json_encode(['ok' => true, 'file' => $filename]);
+        exit;
+    }
+
     echo json_encode(['error' => 'Unknown action']);
     exit;
 }
@@ -235,6 +259,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     .tab { padding: 5px 14px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid transparent; color: #8b949e; background: none; transition: all 0.15s; white-space: nowrap; }
     .tab:hover { color: #e6edf3; background: #21262d; }
     .tab.active { color: #fff; background: #21262d; border-color: #388bfd; }
+    .tab-new { color: #3fb950 !important; border-color: transparent !important; }
+    .tab-new:hover { background: rgba(63,185,80,0.1) !important; border-color: #3fb950 !important; }
     .topbar-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
     .btn-logout { padding: 5px 12px; background: none; border: 1px solid #30363d; border-radius: 6px; color: #8b949e; font-size: 13px; cursor: pointer; }
     .btn-logout:hover { color: #f85149; border-color: #f85149; }
@@ -317,10 +343,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 <!-- Top bar -->
 <div class="topbar">
   <div class="topbar-title">Site Admin <span>●</span> AI Editor</div>
-  <div class="tabs">
-    <button class="tab active" data-file="index.html">index.html</button>
-    <button class="tab" data-file="style.css">style.css</button>
-    <button class="tab" data-file="script.js">script.js</button>
+  <div class="tabs" id="tab-list">
+    <?php foreach (SITE_FILES as $i => $f): ?>
+    <button class="tab <?= $i === 0 ? 'active' : '' ?>" data-file="<?= htmlspecialchars($f) ?>"><?= htmlspecialchars($f) ?></button>
+    <?php endforeach; ?>
+    <button class="tab tab-new" onclick="newPage()" title="Add a new page">+ Page</button>
   </div>
   <div class="topbar-right">
     <a href="../" target="_blank" style="font-size:13px;color:#8b949e;text-decoration:none;padding:5px 10px;border:1px solid #30363d;border-radius:6px;">View Site ↗</a>
@@ -392,14 +419,8 @@ let isBusy = false;
 let showingCode = false;
 
 // ── Tab switching ─────────────────────────────────────────────────────────────
-document.querySelectorAll('.tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    if (isBusy) return;
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    tab.classList.add('active');
-    currentFile = tab.dataset.file;
-    loadFile(currentFile);
-  });
+document.querySelectorAll('.tab:not(.tab-new)').forEach(tab => {
+  tab.addEventListener('click', () => switchTab(tab, tab.dataset.file));
 });
 
 // ── Toggle code view ─────────────────────────────────────────────────────────
@@ -602,6 +623,38 @@ function formatBackupDate(b) {
   if (!m) return b;
   const d = new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]);
   return d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+// ── New page ──────────────────────────────────────────────────────────────────
+async function newPage() {
+  const name = prompt('Page name (e.g. "blog", "about", "services"):');
+  if (!name) return;
+  const clean = name.toLowerCase().replace(/[^a-z0-9\-]/g, '');
+  if (!clean) { showToast('Invalid name', 'err'); return; }
+  const data = await api({ action: 'new_page', name: clean });
+  if (data.error) { showToast(data.error, 'err'); return; }
+  // Add tab and switch to it
+  const tabs = document.getElementById('tab-list');
+  const newTab = document.createElement('button');
+  newTab.className = 'tab active';
+  newTab.dataset.file = data.file;
+  newTab.textContent = data.file;
+  newTab.addEventListener('click', () => switchTab(newTab, data.file));
+  tabs.insertBefore(newTab, tabs.querySelector('.tab-new'));
+  document.querySelectorAll('.tab:not(.tab-new)').forEach(t => { if (t !== newTab) t.classList.remove('active'); });
+  currentFile = data.file;
+  document.getElementById('code-editor').value = '';
+  document.getElementById('editor-file-label').textContent = 'Live Preview';
+  addMsg(`New page "${data.file}" created! Now tell me what to put on it and I'll write it for you.`, 'ai');
+}
+
+function switchTab(tab, file) {
+  if (isBusy) return;
+  document.querySelectorAll('.tab:not(.tab-new)').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  currentFile = file;
+  loadFile(file);
+  if (!showingCode) document.getElementById('editor-file-label').textContent = 'Live Preview';
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
