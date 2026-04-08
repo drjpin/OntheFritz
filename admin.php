@@ -133,7 +133,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $user_message = "Current $lang file ($file):\n\n$content\n\n---\nRequested change: $request\n\nReturn ONLY the complete updated $lang file.";
 
         $payload = json_encode([
-            'model'      => 'claude-3-5-sonnet-20241022',
+            'model'      => 'claude-opus-4-5',
             'max_tokens' => 8192,
             'system'     => $system_prompt,
             'messages'   => [['role' => 'user', 'content' => $user_message]],
