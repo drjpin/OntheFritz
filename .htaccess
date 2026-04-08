@@ -3,3 +3,8 @@ DirectoryIndex index.php index.html
 
 # Clean URLs: allow /blog to load blog.php
 Options -Indexes
+
+# Block direct browser access to internal data files
+<FilesMatch "^(config|usage|images|login_attempts)\.json$|^config\.php$">
+  Require all denied
+</FilesMatch>

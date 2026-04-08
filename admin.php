@@ -38,6 +38,53 @@ function updateUsage($tokens) {
     file_put_contents(USAGE_FILE, json_encode($all, JSON_PRETTY_PRINT));
 }
 
+define('RATE_FILE',       __DIR__ . '/login_attempts.json');
+define('MAX_ATTEMPTS',    5);
+define('LOCKOUT_MINUTES', 15);
+
+// ── Auth helpers ───────────────────────────────────────────────────────────────
+
+// Supports both bcrypt hashes and legacy plaintext (for easy migration)
+// To upgrade: replace ADMIN_PASSWORD value in config.php with the output of:
+//   php -r "echo password_hash('your-password', PASSWORD_DEFAULT);"
+function verifyPassword($input, $stored) {
+    if (strlen($stored) >= 60 && str_starts_with($stored, '$2y$')) {
+        return password_verify($input, $stored);
+    }
+    return hash_equals($stored, $input); // constant-time compare for plaintext
+}
+
+function checkRateLimit() {
+    $ip  = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    $all = file_exists(RATE_FILE) ? (json_decode(file_get_contents(RATE_FILE), true) ?? []) : [];
+    if (!isset($all[$ip])) return ['ok' => true];
+    $e = $all[$ip];
+    if (isset($e['locked_until']) && time() < $e['locked_until']) {
+        $mins = (int) ceil(($e['locked_until'] - time()) / 60);
+        return ['ok' => false, 'msg' => "Too many failed attempts. Try again in {$mins} minute(s)."];
+    }
+    return ['ok' => true];
+}
+
+function recordFailedAttempt() {
+    $ip  = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    $all = file_exists(RATE_FILE) ? (json_decode(file_get_contents(RATE_FILE), true) ?? []) : [];
+    if (!isset($all[$ip])) $all[$ip] = ['attempts' => 0];
+    $all[$ip]['attempts']++;
+    $all[$ip]['last'] = time();
+    if ($all[$ip]['attempts'] >= MAX_ATTEMPTS) {
+        $all[$ip]['locked_until'] = time() + (LOCKOUT_MINUTES * 60);
+    }
+    file_put_contents(RATE_FILE, json_encode($all));
+}
+
+function clearAttempts() {
+    $ip  = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    $all = file_exists(RATE_FILE) ? (json_decode(file_get_contents(RATE_FILE), true) ?? []) : [];
+    unset($all[$ip]);
+    file_put_contents(RATE_FILE, json_encode($all));
+}
+
 // ── Image helpers ──────────────────────────────────────────────────────────────
 
 function resizeImage($src_path, $dest_path, $max_w = 1800) {
@@ -138,12 +185,18 @@ if (isset($_POST['logout'])) {
 }
 
 if (isset($_POST['password'])) {
-    if ($_POST['password'] === ADMIN_PASSWORD) {
+    $rate = checkRateLimit();
+    if (!$rate['ok']) {
+        $login_error = $rate['msg'];
+    } elseif (verifyPassword($_POST['password'], ADMIN_PASSWORD)) {
+        clearAttempts();
         $_SESSION['admin_auth'] = true;
         header('Location: admin.php');
         exit;
+    } else {
+        recordFailedAttempt();
+        $login_error = 'Invalid password.';
     }
-    $login_error = 'Invalid password.';
 }
 
 // ── Login page ────────────────────────────────────────────────────────────────
@@ -210,7 +263,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         if (!in_array($file, SITE_FILES, true)) { echo json_encode(['error' => 'Invalid file']); exit; }
 
         // Create timestamped backup of ALL site files before saving
-        if (!is_dir(BACKUP_DIR)) mkdir(BACKUP_DIR, 0755, true);
+        if (!is_dir(BACKUP_DIR)) {
+            mkdir(BACKUP_DIR, 0755, true);
+            // Deny direct web access to backup files
+            file_put_contents(BACKUP_DIR . '/.htaccess', "Require all denied\n");
+        }
         $ts = date('Y-m-d-His');
         $bpath = BACKUP_DIR . '/' . $ts;
         mkdir($bpath, 0755, true);
@@ -479,7 +536,11 @@ PHP;
         }
         $f       = $_FILES['image'];
         $allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-        if (!in_array($f['type'], $allowed, true)) {
+        // Use finfo to check the actual file bytes — never trust the browser-supplied type
+        $finfo     = finfo_open(FILEINFO_MIME_TYPE);
+        $real_mime = finfo_file($finfo, $f['tmp_name']);
+        finfo_close($finfo);
+        if (!in_array($real_mime, $allowed, true)) {
             echo json_encode(['error' => 'Only JPEG, PNG, WebP, or GIF allowed']); exit;
         }
         if (!is_dir(IMAGES_DIR)) {

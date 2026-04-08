@@ -2,6 +2,7 @@
 config.php
 backups/
 usage.json
+login_attempts.json
 
 # Dependencies
 /node_modules
