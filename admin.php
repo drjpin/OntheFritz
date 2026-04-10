@@ -1302,10 +1302,11 @@ async function fireAIRequest(request) {
   if (data.error) {
     addMsg('Error: ' + data.error, 'ai error');
   } else if (data.multi) {
-    const files = data.saved_files && data.saved_files.length
-      ? data.saved_files.join(', ')
-      : 'no files changed';
-    addMsg(`Done! Changes saved to: ${files}. No further action needed.`, 'ai success');
+    if (data.saved_files && data.saved_files.length) {
+      addMsg(`Done! Changes saved to: ${data.saved_files.join(', ')}. No further action needed.`, 'ai success');
+    } else {
+      addMsg(`AI responded but found nothing to change. The text it searched for may not exist in the current site files.`, 'ai error');
+    }
     if (data.monthly_used !== undefined) {
       usageData.tokens_used   = data.monthly_used;
       usageData.monthly_limit = data.monthly_limit;
