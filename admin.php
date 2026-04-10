@@ -318,12 +318,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
             $system_prompt = "You are an expert web developer editing a chiropractic practice website. "
                 . "The site uses PHP includes: nav.php contains the navigation, footer.php contains the footer. "
-                . "Available files: " . implode(', ', array_keys($all_contents)) . ".\n"
-                . "Apply the requested change across ALL files that need updating.\n"
-                . "Return ONLY a valid JSON object — keys are filenames, values are the complete updated file contents. "
-                . "Include ONLY files that actually need changes. No explanation, no markdown fences, raw JSON only.";
+                . "Available files: " . implode(', ', array_keys($all_contents)) . ".\n\n"
+                . "Apply the requested change across ALL files that need updating. "
+                . "Choose the most efficient response format:\n\n"
+                . "FORMAT A — for text replacements (rename, contact info, simple wording changes):\n"
+                . "{\"mode\":\"replace\",\"replacements\":[{\"find\":\"exact old text\",\"replace\":\"new text\"}]}\n"
+                . "List every distinct string that needs changing. These will be applied to ALL site files.\n\n"
+                . "FORMAT B — for structural/content changes (redesigning sections, adding new content):\n"
+                . "{\"mode\":\"files\",\"files\":{\"filename.php\":\"complete new file content\"}}\n"
+                . "Include only files that actually change.\n\n"
+                . "Return raw JSON only — no explanation, no markdown fences.";
 
-            $user_message = implode("\n\n", $context_parts) . "\n\n---\nRequest: $request\n\nReturn JSON with changed files only.";
+            $user_message = implode("\n\n", $context_parts) . "\n\n---\nRequest: $request";
 
             $payload = json_encode([
                 'max_tokens' => 4096,
@@ -354,34 +360,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 echo json_encode(['error' => "Hub error: $msg"]); exit;
             }
 
-            $raw = $data['content'][0]['text'];
-            // Strip markdown fences
-            $raw = trim($raw);
+            // Parse Claude's response
+            $raw = trim($data['content'][0]['text']);
             $raw = preg_replace('/^```[a-z]*\r?\n?/i', '', $raw);
             $raw = preg_replace('/\r?\n?```$/i', '', $raw);
             $raw = trim($raw);
-            // Find the JSON object boundaries manually (safer than regex on large strings)
             $start = strpos($raw, '{');
             $end   = strrpos($raw, '}');
             if ($start !== false && $end !== false && $end > $start) {
                 $raw = substr($raw, $start, $end - $start + 1);
             }
-            $changes = json_decode($raw, true);
-            if (!is_array($changes)) {
-                echo json_encode(['error' => 'AI parse error (' . json_last_error_msg() . '). Raw: ' . substr($raw, 0, 200)]); exit;
+            $result_json = json_decode($raw, true);
+            if (!is_array($result_json) || empty($result_json['mode'])) {
+                echo json_encode(['error' => 'AI parse error (' . json_last_error_msg() . '). Raw: ' . substr($raw, 0, 300)]); exit;
             }
 
-            // Backup before saving
+            // Backup before any writes
             $ts    = date('Y-m-d-His');
             $bpath = BACKUP_DIR . '/' . $ts;
             mkdir($bpath, 0755, true);
             foreach (SITE_FILES as $f) { $src = __DIR__ . '/' . $f; if (file_exists($src)) copy($src, $bpath . '/' . $f); }
 
             $saved_files = [];
-            foreach ($changes as $f => $new_content) {
-                if (!in_array($f, SITE_FILES, true)) continue;
-                file_put_contents(__DIR__ . '/' . $f, $new_content);
-                $saved_files[] = $f;
+
+            if ($result_json['mode'] === 'replace' && !empty($result_json['replacements'])) {
+                // Apply find/replace across every text file
+                foreach ($all_contents as $f => $orig) {
+                    $updated = $orig;
+                    foreach ($result_json['replacements'] as $r) {
+                        if (!isset($r['find'], $r['replace'])) continue;
+                        $updated = str_replace($r['find'], $r['replace'], $updated);
+                    }
+                    if ($updated !== $orig) {
+                        file_put_contents(__DIR__ . '/' . $f, $updated);
+                        $saved_files[] = $f;
+                    }
+                }
+            } elseif ($result_json['mode'] === 'files' && !empty($result_json['files'])) {
+                foreach ($result_json['files'] as $f => $new_content) {
+                    if (!in_array($f, SITE_FILES, true)) continue;
+                    file_put_contents(__DIR__ . '/' . $f, $new_content);
+                    $saved_files[] = $f;
+                }
             }
 
             $tokens_used = ($data['usage']['input_tokens'] ?? 0) + ($data['usage']['output_tokens'] ?? 0);
@@ -1282,11 +1302,10 @@ async function fireAIRequest(request) {
   if (data.error) {
     addMsg('Error: ' + data.error, 'ai error');
   } else if (data.multi) {
-    // Multi-file edit — no tab was selected, Claude updated multiple files
     const files = data.saved_files && data.saved_files.length
       ? data.saved_files.join(', ')
-      : 'no files';
-    addMsg(`Done! Updated: ${files}. Reload the page to see changes.`, 'ai success');
+      : 'no files changed';
+    addMsg(`Done! Changes saved to: ${files}. No further action needed.`, 'ai success');
     if (data.monthly_used !== undefined) {
       usageData.tokens_used   = data.monthly_used;
       usageData.monthly_limit = data.monthly_limit;
