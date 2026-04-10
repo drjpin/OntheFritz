@@ -319,15 +319,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $system_prompt = "You are an expert web developer editing a chiropractic practice website. "
                 . "The site uses PHP includes: nav.php contains the navigation, footer.php contains the footer. "
                 . "Available files: " . implode(', ', array_keys($all_contents)) . ".\n\n"
-                . "Apply the requested change across ALL files that need updating. "
-                . "Choose the most efficient response format:\n\n"
-                . "FORMAT A — for text replacements (rename, contact info, simple wording changes):\n"
-                . "{\"mode\":\"replace\",\"replacements\":[{\"find\":\"exact old text\",\"replace\":\"new text\"}]}\n"
-                . "List every distinct string that needs changing. These will be applied to ALL site files.\n\n"
-                . "FORMAT B — for structural/content changes (redesigning sections, adding new content):\n"
-                . "{\"mode\":\"files\",\"files\":{\"filename.php\":\"complete new file content\"}}\n"
-                . "Include only files that actually change.\n\n"
-                . "Return raw JSON only — no explanation, no markdown fences.";
+                . "Your job is to identify every piece of text that needs to change and return find/replace pairs. "
+                . "These will be applied automatically across ALL site files.\n\n"
+                . "Return ONLY this JSON format — no explanation, no markdown fences:\n"
+                . "{\"mode\":\"replace\",\"replacements\":[{\"find\":\"exact old text\",\"replace\":\"new text\"},{\"find\":\"another old string\",\"replace\":\"new string\"}]}\n\n"
+                . "Rules:\n"
+                . "- The 'find' value must be the EXACT string as it appears in the files shown.\n"
+                . "- List every distinct variation that needs replacing (e.g. different capitalisations, URL slugs, email addresses).\n"
+                . "- Do NOT return full file contents. Find/replace pairs only.";
 
             $user_message = implode("\n\n", $context_parts) . "\n\n---\nRequest: $request";
 
@@ -371,7 +370,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $raw = substr($raw, $start, $end - $start + 1);
             }
             $result_json = json_decode($raw, true);
-            if (!is_array($result_json) || empty($result_json['mode'])) {
+            if (!is_array($result_json) || empty($result_json['replacements'])) {
                 echo json_encode(['error' => 'AI parse error (' . json_last_error_msg() . '). Raw: ' . substr($raw, 0, 300)]); exit;
             }
 
@@ -381,25 +380,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             mkdir($bpath, 0755, true);
             foreach (SITE_FILES as $f) { $src = __DIR__ . '/' . $f; if (file_exists($src)) copy($src, $bpath . '/' . $f); }
 
+            // Apply find/replace pairs across every text file
             $saved_files = [];
-
-            if ($result_json['mode'] === 'replace' && !empty($result_json['replacements'])) {
-                // Apply find/replace across every text file
-                foreach ($all_contents as $f => $orig) {
-                    $updated = $orig;
-                    foreach ($result_json['replacements'] as $r) {
-                        if (!isset($r['find'], $r['replace'])) continue;
-                        $updated = str_replace($r['find'], $r['replace'], $updated);
-                    }
-                    if ($updated !== $orig) {
-                        file_put_contents(__DIR__ . '/' . $f, $updated);
-                        $saved_files[] = $f;
-                    }
+            foreach ($all_contents as $f => $orig) {
+                $updated = $orig;
+                foreach ($result_json['replacements'] as $r) {
+                    if (!isset($r['find'], $r['replace'])) continue;
+                    $updated = str_replace($r['find'], $r['replace'], $updated);
                 }
-            } elseif ($result_json['mode'] === 'files' && !empty($result_json['files'])) {
-                foreach ($result_json['files'] as $f => $new_content) {
-                    if (!in_array($f, SITE_FILES, true)) continue;
-                    file_put_contents(__DIR__ . '/' . $f, $new_content);
+                if ($updated !== $orig) {
+                    file_put_contents(__DIR__ . '/' . $f, $updated);
                     $saved_files[] = $f;
                 }
             }
