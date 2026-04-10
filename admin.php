@@ -296,10 +296,99 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $file    = $_POST['file']    ?? '';
         $content = $_POST['content'] ?? '';
         $request = trim($_POST['request'] ?? '');
-        if (!in_array($file, SITE_FILES, true) || !$request) {
-            echo json_encode(['error' => 'Missing file or request']);
+        if (!$request) {
+            echo json_encode(['error' => 'Missing request']);
             exit;
         }
+
+        $file_valid = in_array($file, SITE_FILES, true);
+
+        // ── Multi-file mode (no tab selected) ─────────────────────────────────
+        if (!$file_valid) {
+            $text_exts    = ['php', 'html', 'css', 'js'];
+            $all_contents = [];
+            foreach (SITE_FILES as $f) {
+                if (!in_array(pathinfo($f, PATHINFO_EXTENSION), $text_exts, true)) continue;
+                $path = __DIR__ . '/' . $f;
+                if (file_exists($path)) $all_contents[$f] = file_get_contents($path);
+            }
+
+            $context_parts = [];
+            foreach ($all_contents as $f => $c) $context_parts[] = "=== $f ===\n$c";
+
+            $system_prompt = "You are an expert web developer editing a chiropractic practice website. "
+                . "The site uses PHP includes: nav.php contains the navigation, footer.php contains the footer. "
+                . "Available files: " . implode(', ', array_keys($all_contents)) . ".\n"
+                . "Apply the requested change across ALL files that need updating.\n"
+                . "Return ONLY a valid JSON object — keys are filenames, values are the complete updated file contents. "
+                . "Include ONLY files that actually need changes. No explanation, no markdown fences, raw JSON only.";
+
+            $user_message = implode("\n\n", $context_parts) . "\n\n---\nRequest: $request\n\nReturn JSON with changed files only.";
+
+            $payload = json_encode([
+                'max_tokens' => 4096,
+                'system'     => $system_prompt,
+                'messages'   => [['role' => 'user', 'content' => $user_message]],
+            ]);
+
+            $ch = curl_init(HUB_URL . '/api/ai.php');
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => $payload,
+                CURLOPT_TIMEOUT        => 180,
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_SSL_VERIFYHOST => false,
+                CURLOPT_HTTPHEADER     => ['Content-Type: application/json', 'X-Hub-Key: ' . HUB_KEY],
+            ]);
+            $resp      = curl_exec($ch);
+            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curl_err  = curl_error($ch);
+            curl_close($ch);
+
+            if ($resp === false) { echo json_encode(['error' => 'Hub request failed: ' . $curl_err]); exit; }
+
+            $data = json_decode($resp, true);
+            if ($http_code !== 200 || empty($data['content'][0]['text'])) {
+                $msg = $data['error']['message'] ?? "HTTP $http_code — " . substr($resp, 0, 300);
+                echo json_encode(['error' => "Hub error: $msg"]); exit;
+            }
+
+            $raw = trim(preg_replace(['/^```[a-z]*\n?/i', '/\n?```$/i'], '', $data['content'][0]['text']));
+            $changes = json_decode($raw, true);
+            if (!is_array($changes)) {
+                echo json_encode(['error' => 'AI returned unexpected format. Try selecting a specific file tab and retrying.']); exit;
+            }
+
+            // Backup before saving
+            $ts    = date('Y-m-d-His');
+            $bpath = BACKUP_DIR . '/' . $ts;
+            mkdir($bpath, 0755, true);
+            foreach (SITE_FILES as $f) { $src = __DIR__ . '/' . $f; if (file_exists($src)) copy($src, $bpath . '/' . $f); }
+
+            $saved_files = [];
+            foreach ($changes as $f => $new_content) {
+                if (!in_array($f, SITE_FILES, true)) continue;
+                file_put_contents(__DIR__ . '/' . $f, $new_content);
+                $saved_files[] = $f;
+            }
+
+            $tokens_used = ($data['usage']['input_tokens'] ?? 0) + ($data['usage']['output_tokens'] ?? 0);
+            updateUsage($tokens_used);
+
+            echo json_encode([
+                'multi'         => true,
+                'saved_files'   => $saved_files,
+                'tokens_used'   => $tokens_used,
+                'monthly_used'  => $data['monthly_used']  ?? 0,
+                'monthly_limit' => $data['monthly_limit'] ?? MONTHLY_TOKENS,
+                'reset_date'    => $data['reset_date']    ?? date('M j', strtotime('first day of next month')),
+                'backup'        => $ts,
+            ]);
+            exit;
+        }
+
+        // ── Single-file mode ──────────────────────────────────────────────────
 
         $ext  = pathinfo($file, PATHINFO_EXTENSION);
         $lang = match($ext) { 'html' => 'HTML', 'css' => 'CSS', 'js' => 'JavaScript', 'php' => 'PHP/HTML', default => $ext };
@@ -391,15 +480,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $curl_err  = curl_error($ch);
         curl_close($ch);
 
-        if (!$resp) {
-            echo json_encode(['error' => 'API request failed: ' . $curl_err]);
+        if ($resp === false) {
+            echo json_encode(['error' => 'Hub request failed: ' . $curl_err]);
             exit;
         }
 
         $data = json_decode($resp, true);
         if ($http_code !== 200 || empty($data['content'][0]['text'])) {
-            $msg = $data['error']['message'] ?? $resp;
-            echo json_encode(['error' => "API error ($http_code): $msg"]);
+            $msg = $data['error']['message'] ?? "HTTP $http_code — " . substr($resp, 0, 300);
+            echo json_encode(['error' => "Hub error: $msg"]);
             exit;
         }
 
@@ -415,17 +504,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $result = $page_head . "\n\n" . $result . "\n\n" . $page_tail;
         }
 
-        // Track token usage from the API response
         $tokens_used = ($data['usage']['input_tokens'] ?? 0) + ($data['usage']['output_tokens'] ?? 0);
         updateUsage($tokens_used);
-        $current = getUsage();
 
         echo json_encode([
             'content'       => $result,
             'tokens_used'   => $tokens_used,
-            'monthly_used'  => $current['tokens_used'],
-            'monthly_limit' => MONTHLY_TOKENS,
-            'reset_date'    => date('M j', strtotime('first day of next month')),
+            'monthly_used'  => $data['monthly_used']  ?? 0,
+            'monthly_limit' => $data['monthly_limit'] ?? MONTHLY_TOKENS,
+            'reset_date'    => $data['reset_date']    ?? date('M j', strtotime('first day of next month')),
         ]);
         exit;
     }
@@ -1183,14 +1270,26 @@ async function fireAIRequest(request) {
   thinking.remove();
   if (data.error) {
     addMsg('Error: ' + data.error, 'ai error');
+  } else if (data.multi) {
+    // Multi-file edit — no tab was selected, Claude updated multiple files
+    const files = data.saved_files && data.saved_files.length
+      ? data.saved_files.join(', ')
+      : 'no files';
+    addMsg(`Done! Updated: ${files}. Reload the page to see changes.`, 'ai success');
+    if (data.monthly_used !== undefined) {
+      usageData.tokens_used   = data.monthly_used;
+      usageData.monthly_limit = data.monthly_limit;
+      usageData.reset_date    = data.reset_date;
+      updateMeter();
+    }
   } else {
     document.getElementById('code-editor').value = data.content;
     await updatePreview(currentFile, data.content);
     addMsg('Done! Preview updated — hit Save to push it live.', 'ai success');
     if (data.monthly_used !== undefined) {
-      usageData.tokens_used = data.monthly_used;
+      usageData.tokens_used   = data.monthly_used;
       usageData.monthly_limit = data.monthly_limit;
-      usageData.reset_date   = data.reset_date;
+      usageData.reset_date    = data.reset_date;
       updateMeter();
     }
   }
