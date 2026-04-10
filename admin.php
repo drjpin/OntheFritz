@@ -826,6 +826,9 @@ PHP;
     ::-webkit-scrollbar-thumb:hover { background: #484f58; }
 
     /* ── Images Tab ── */
+    .tab-sitewide { color: #d2a8ff !important; }
+    .tab-sitewide:hover { border-color: #8957e5 !important; }
+    .tab-sitewide.active { border-color: #8957e5 !important; background: #1a1040 !important; }
     .tab-images { border-left: 1px solid #30363d !important; margin-left: 8px; padding-left: 18px !important; }
 
     /* ── Images Panel ── */
@@ -917,6 +920,7 @@ PHP;
     <button class="tab <?= $i === 0 ? 'active' : '' ?>" data-file="<?= htmlspecialchars($f) ?>"><?= htmlspecialchars($f) ?></button>
     <?php endforeach; ?>
     <button class="tab tab-new" onclick="newPage()" title="Add a new page">+ Page</button>
+    <button class="tab tab-sitewide" id="tab-sitewide" onclick="switchToSitewide()" title="Make changes across all files at once">Site-wide</button>
     <button class="tab tab-images" id="tab-images" onclick="toggleImagesMode()" title="Manage images">📷 Images</button>
   </div>
   <div class="topbar-right">
@@ -1053,9 +1057,25 @@ let isBusy = false;
 let showingCode = false;
 
 // ── Tab switching ─────────────────────────────────────────────────────────────
-document.querySelectorAll('.tab:not(.tab-new):not(.tab-images)').forEach(tab => {
+let isSitewideMode = false;
+
+document.querySelectorAll('.tab:not(.tab-new):not(.tab-images):not(.tab-sitewide)').forEach(tab => {
   tab.addEventListener('click', () => switchTab(tab, tab.dataset.file));
 });
+
+function switchToSitewide() {
+  if (inImagesMode) exitImagesMode();
+  isSitewideMode = true;
+  currentFile = '';
+  document.querySelectorAll('.tab:not(.tab-new):not(.tab-images):not(.tab-sitewide)').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-sitewide').classList.add('active');
+  document.getElementById('editor-file-label').textContent = 'Site-wide — changes auto-saved to all affected files';
+  document.getElementById('btn-toggle-code').style.display = 'none';
+  document.getElementById('btn-save').style.display = 'none';
+  document.getElementById('preview-iframe').src = '/?' + Date.now();
+  document.getElementById('code-editor').style.display = 'none';
+  document.getElementById('preview-iframe').style.display = 'block';
+}
 
 // ── Toggle code view ─────────────────────────────────────────────────────────
 function toggleCode() {
@@ -1306,7 +1326,14 @@ async function fireAIRequest(request) {
   } else {
     document.getElementById('code-editor').value = data.content;
     await updatePreview(currentFile, data.content);
-    addMsg('Done! Preview updated — hit Save to push it live.', 'ai success');
+    // Auto-save immediately — no manual Save step needed
+    const saved = await api({ action: 'save', file: currentFile, content: data.content });
+    if (saved.ok) {
+      addMsg('Done! Change saved live to ' + currentFile + '.', 'ai success');
+      showToast('Saved!', 'ok');
+    } else {
+      addMsg('Done! Review the change then hit Save to apply it.', 'ai success');
+    }
     if (data.monthly_used !== undefined) {
       usageData.tokens_used   = data.monthly_used;
       usageData.monthly_limit = data.monthly_limit;
@@ -1505,7 +1532,13 @@ async function newPage() {
 function switchTab(tab, file) {
   if (isBusy) return;
   if (inImagesMode) exitImagesMode();
-  document.querySelectorAll('.tab:not(.tab-new):not(.tab-images)').forEach(t => t.classList.remove('active'));
+  if (isSitewideMode) {
+    isSitewideMode = false;
+    document.getElementById('tab-sitewide').classList.remove('active');
+    document.getElementById('btn-toggle-code').style.display = '';
+    document.getElementById('btn-save').style.display = '';
+  }
+  document.querySelectorAll('.tab:not(.tab-new):not(.tab-images):not(.tab-sitewide)').forEach(t => t.classList.remove('active'));
   tab.classList.add('active');
   currentFile = file;
   loadFile(file);
