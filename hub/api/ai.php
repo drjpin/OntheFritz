@@ -33,7 +33,7 @@ $client = requireClientAuth();
 $db   = getDB();
 $ym   = date('Y-m');
 $stmt = $db->prepare(
-    'SELECT tokens_used FROM `usage` WHERE client_id = ? AND year_month = ?'
+    'SELECT tokens_used FROM `usage` WHERE client_id = ? AND `year_month` = ?'
 );
 $stmt->execute([$client['id'], $ym]);
 $tokens_used = (int)($stmt->fetchColumn() ?: 0);
@@ -80,14 +80,14 @@ if ($result['code'] !== 200 || empty($data['content'][0]['text'])) {
 $new_tokens = ($data['usage']['input_tokens'] ?? 0) + ($data['usage']['output_tokens'] ?? 0);
 
 $db->prepare(
-    'INSERT INTO `usage` (client_id, year_month, tokens_used, requests_count)
+    'INSERT INTO `usage` (client_id, `year_month`, tokens_used, requests_count)
      VALUES (?, ?, ?, 1)
      ON DUPLICATE KEY UPDATE
        tokens_used     = tokens_used     + VALUES(tokens_used),
        requests_count  = requests_count  + 1'
 )->execute([$client['id'], $ym, $new_tokens]);
 
-$stmt2 = $db->prepare('SELECT tokens_used FROM `usage` WHERE client_id = ? AND year_month = ?');
+$stmt2 = $db->prepare('SELECT tokens_used FROM `usage` WHERE client_id = ? AND `year_month` = ?');
 $stmt2->execute([$client['id'], $ym]);
 $monthly_used = (int)($stmt2->fetchColumn() ?: $tokens_used + $new_tokens);
 

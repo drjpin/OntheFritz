@@ -26,7 +26,7 @@ $clients = $db->query(
     "SELECT c.*, COALESCE(u.tokens_used, 0) AS tokens_used,
                  COALESCE(u.requests_count, 0) AS requests_count
      FROM clients c
-     LEFT JOIN `usage` u ON u.client_id = c.id AND u.year_month = '$ym'
+     LEFT JOIN `usage` u ON u.client_id = c.id AND u.`year_month` = '$ym'
      ORDER BY c.name"
 )->fetchAll();
 

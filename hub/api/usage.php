@@ -16,7 +16,7 @@ $db  = getDB();
 $ym  = date('Y-m');
 
 $stmt = $db->prepare(
-    'SELECT tokens_used, requests_count FROM `usage` WHERE client_id = ? AND year_month = ?'
+    'SELECT tokens_used, requests_count FROM `usage` WHERE client_id = ? AND `year_month` = ?'
 );
 $stmt->execute([$client['id'], $ym]);
 $row = $stmt->fetch() ?: ['tokens_used' => 0, 'requests_count' => 0];
