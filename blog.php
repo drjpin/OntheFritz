@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Blog | Sunrise Chiropractic</title>
-  <meta name="description" content="Expert chiropractic insights, health tips, and patient education from the team at Sunrise Chiropractic in Springfield, IL." />
+  <title>Blog | Hackett Chiropractic</title>
+  <meta name="description" content="Expert chiropractic insights, health tips, and patient education from the team at Hackett Chiropractic in Stevensville, MI." />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -61,7 +61,7 @@
 <div class="blog-hero">
   <div class="container">
     <div class="blog-hero-label">Health &amp; Wellness</div>
-    <h1 class="blog-hero-title">The Sunrise Blog</h1>
+    <h1 class="blog-hero-title">The Hackett Blog</h1>
     <p class="blog-hero-sub">Expert insights on chiropractic care, pain relief, and living your healthiest life.</p>
   </div>
 </div>
@@ -134,7 +134,7 @@
 
             <h2>Is It Safe?</h2>
             <p>Chiropractic adjustment is one of the safest treatments available for musculoskeletal pain. Serious complications are extremely rare — significantly rarer than the risks associated with long-term pain medication use, which is often the alternative.</p>
-            <p>At Sunrise Chiropractic, every patient receives a thorough health history and physical examination before any treatment. If we ever determine that chiropractic care isn't the right fit for your situation, we'll tell you — and refer you to someone who can help.</p>
+            <p>At Hackett Chiropractic, every patient receives a thorough health history and physical examination before any treatment. If we ever determine that chiropractic care isn't the right fit for your situation, we'll tell you — and refer you to someone who can help.</p>
 
             <h2>Ready to Experience It for Yourself?</h2>
             <p>The best way to understand what a chiropractic adjustment feels like is to experience one. We offer a <strong>free initial consultation</strong> — no commitment, no pressure. Just a conversation about what's going on with your body and whether chiropractic care might help.</p>

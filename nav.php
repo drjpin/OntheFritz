@@ -7,7 +7,7 @@ $home    = ($current === 'index.php') ? '' : 'index.php';
 <header class="nav" id="nav">
   <div class="container nav-inner">
     <a href="index.php" class="nav-logo">
-      <span class="nav-logo-name">Sunrise Chiropractic</span>
+      <span class="nav-logo-name">Hackett Chiropractic</span>
       <span class="nav-logo-tag">Your path to a pain-free life</span>
     </a>
     <nav class="nav-links" id="nav-links">

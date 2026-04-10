@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sunrise Chiropractic | Feel Better. Move Better. Live Better.</title>
+  <title>Hackett Chiropractic | Feel Better. Move Better. Live Better.</title>
   <meta name="description" content="Expert, compassionate chiropractic care for the whole family in Springfield, IL. Accepting new patients — same-week appointments available. Call (555) 867-5309." />
   <meta name="keywords" content="chiropractor, chiropractic care, back pain, neck pain, Springfield IL, spinal adjustments" />
 
   <!-- Open Graph -->
-  <meta property="og:title" content="Sunrise Chiropractic" />
+  <meta property="og:title" content="Hackett Chiropractic" />
   <meta property="og:description" content="Expert chiropractic care for the whole family. Accepting new patients." />
   <meta property="og:type" content="website" />
 
@@ -17,10 +17,10 @@
   {
     "@context": "https://schema.org",
     "@type": "MedicalBusiness",
-    "name": "Sunrise Chiropractic",
+    "name": "Hackett Chiropractic",
     "description": "Expert, compassionate chiropractic care for the whole family.",
     "telephone": "(555) 867-5309",
-    "email": "hello@sunrisechiro.com",
+    "email": "hello@hackettchiropractic.com",
     "address": {
       "@type": "PostalAddress",
       "streetAddress": "1234 Wellness Blvd, Suite 100",
@@ -203,7 +203,7 @@
             <div class="contact-icon">&#9993;</div>
             <div>
               <div class="contact-item-label">Email</div>
-              <a href="mailto:hello@sunrisechiro.com" class="contact-item-value">hello@sunrisechiro.com</a>
+              <a href="mailto:hello@hackettchiropractic.com" class="contact-item-value">hello@hackettchiropractic.com</a>
             </div>
           </div>
           <div class="contact-item">
