@@ -354,10 +354,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 echo json_encode(['error' => "Hub error: $msg"]); exit;
             }
 
-            $raw = trim(preg_replace(['/^```[a-z]*\n?/i', '/\n?```$/i'], '', $data['content'][0]['text']));
-            $changes = json_decode($raw, true);
+            $raw = $data['content'][0]['text'];
+            // Strip markdown fences
+            $raw = preg_replace('/^```[a-z]*\n?/i', '', trim($raw));
+            $raw = preg_replace('/\n?```$/i', '', $raw);
+            // Extract first {...} block in case Claude added any preamble text
+            if (preg_match('/(\{[\s\S]*\})/u', $raw, $m)) $raw = $m[1];
+            $changes = json_decode(trim($raw), true);
             if (!is_array($changes)) {
-                echo json_encode(['error' => 'AI returned unexpected format. Try selecting a specific file tab and retrying.']); exit;
+                echo json_encode(['error' => 'AI parse error. Raw: ' . substr($raw, 0, 300)]); exit;
             }
 
             // Backup before saving
