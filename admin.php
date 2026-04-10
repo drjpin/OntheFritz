@@ -356,13 +356,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
             $raw = $data['content'][0]['text'];
             // Strip markdown fences
-            $raw = preg_replace('/^```[a-z]*\n?/i', '', trim($raw));
-            $raw = preg_replace('/\n?```$/i', '', $raw);
-            // Extract first {...} block in case Claude added any preamble text
-            if (preg_match('/(\{[\s\S]*\})/u', $raw, $m)) $raw = $m[1];
-            $changes = json_decode(trim($raw), true);
+            $raw = trim($raw);
+            $raw = preg_replace('/^```[a-z]*\r?\n?/i', '', $raw);
+            $raw = preg_replace('/\r?\n?```$/i', '', $raw);
+            $raw = trim($raw);
+            // Find the JSON object boundaries manually (safer than regex on large strings)
+            $start = strpos($raw, '{');
+            $end   = strrpos($raw, '}');
+            if ($start !== false && $end !== false && $end > $start) {
+                $raw = substr($raw, $start, $end - $start + 1);
+            }
+            $changes = json_decode($raw, true);
             if (!is_array($changes)) {
-                echo json_encode(['error' => 'AI parse error. Raw: ' . substr($raw, 0, 300)]); exit;
+                echo json_encode(['error' => 'AI parse error (' . json_last_error_msg() . '). Raw: ' . substr($raw, 0, 200)]); exit;
             }
 
             // Backup before saving
