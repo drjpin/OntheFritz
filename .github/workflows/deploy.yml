@@ -27,3 +27,15 @@ jobs:
             **/node_modules/**
             **/.DS_Store
             **/config.php
+            **/backups/**
+            **/images/**
+            **/usage.json
+            **/images.json
+            nav.php
+            footer.php
+            index.php
+            index.html
+            blog.php
+            blog.html
+            style.css
+            script.js
