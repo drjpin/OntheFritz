@@ -134,6 +134,8 @@ function generateAltText($image_path) {
         CURLOPT_POST           => true,
         CURLOPT_POSTFIELDS     => $payload,
         CURLOPT_TIMEOUT        => 60,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
         CURLOPT_HTTPHEADER     => [
             'Content-Type: application/json',
             'X-Hub-Key: ' . HUB_KEY,
@@ -376,6 +378,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             CURLOPT_POST           => true,
             CURLOPT_POSTFIELDS     => $payload,
             CURLOPT_TIMEOUT        => 180,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => false,
             CURLOPT_HTTPHEADER     => [
                 'Content-Type: application/json',
                 'X-Hub-Key: ' . HUB_KEY,
