@@ -66,7 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
             ");
             $pdo->exec("
-                CREATE TABLE IF NOT EXISTS usage (
+                CREATE TABLE IF NOT EXISTS `usage` (
                     id              INT AUTO_INCREMENT PRIMARY KEY,
                     client_id       INT  NOT NULL,
                     year_month      CHAR(7) NOT NULL,
