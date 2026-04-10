@@ -2,11 +2,25 @@
 set_time_limit(0);
 header('Content-Type: application/json; charset=utf-8');
 
+// Catch any fatal errors and return them as JSON instead of a blank 500
+set_error_handler(function($severity, $message, $file, $line) {
+    throw new ErrorException($message, 0, $severity, $file, $line);
+});
+register_shutdown_function(function() {
+    $e = error_get_last();
+    if ($e && in_array($e['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        if (!headers_sent()) http_response_code(500);
+        echo json_encode(['error' => 'Hub PHP error: ' . $e['message'] . ' in ' . basename($e['file']) . ':' . $e['line']]);
+    }
+});
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     echo json_encode(['error' => 'Method not allowed']);
     exit;
 }
+
+try {
 
 require_once __DIR__ . '/../lib/db.php';
 require_once __DIR__ . '/../lib/auth.php';
@@ -85,3 +99,8 @@ echo json_encode([
     'monthly_limit' => (int)$client['monthly_token_limit'],
     'reset_date'    => date('M j', strtotime('first day of next month')),
 ]);
+
+} catch (Throwable $e) {
+    if (!headers_sent()) http_response_code(500);
+    echo json_encode(['error' => 'Hub exception: ' . $e->getMessage() . ' in ' . basename($e->getFile()) . ':' . $e->getLine()]);
+}
