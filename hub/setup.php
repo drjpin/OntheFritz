@@ -50,32 +50,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors)) {
         // Create tables
         try {
-            $pdo->exec("
-                CREATE TABLE IF NOT EXISTS clients (
-                    id                    INT AUTO_INCREMENT PRIMARY KEY,
-                    name                  VARCHAR(255) NOT NULL,
-                    domain                VARCHAR(255) NOT NULL,
-                    hub_api_key           VARCHAR(64)  NOT NULL UNIQUE,
-                    status                ENUM('active','suspended','cancelled') DEFAULT 'active',
-                    monthly_token_limit   INT DEFAULT 150000,
-                    claude_model          VARCHAR(100) DEFAULT 'claude-sonnet-4-6',
-                    stripe_customer_id    VARCHAR(255) DEFAULT NULL,
+            $pdo->exec(
+                "CREATE TABLE IF NOT EXISTS clients (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL,
+                    domain VARCHAR(255) NOT NULL,
+                    hub_api_key VARCHAR(64) NOT NULL UNIQUE,
+                    status ENUM('active','suspended','cancelled') DEFAULT 'active',
+                    monthly_token_limit INT DEFAULT 150000,
+                    claude_model VARCHAR(100) DEFAULT 'claude-sonnet-4-6',
+                    stripe_customer_id VARCHAR(255) DEFAULT NULL,
                     stripe_subscription_id VARCHAR(255) DEFAULT NULL,
-                    notes                 TEXT DEFAULT NULL,
-                    created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-            ");
-            $pdo->exec("
-                CREATE TABLE IF NOT EXISTS `usage` (
-                    id              INT AUTO_INCREMENT PRIMARY KEY,
-                    client_id       INT  NOT NULL,
-                    year_month      CHAR(7) NOT NULL,
-                    tokens_used     INT DEFAULT 0,
-                    requests_count  INT DEFAULT 0,
-                    UNIQUE KEY client_month (client_id, year_month),
+                    notes TEXT DEFAULT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+            );
+            $pdo->exec(
+                "CREATE TABLE IF NOT EXISTS `usage` (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    client_id INT NOT NULL,
+                    `year_month` CHAR(7) NOT NULL,
+                    tokens_used INT DEFAULT 0,
+                    requests_count INT DEFAULT 0,
+                    UNIQUE KEY client_month (client_id, `year_month`),
                     FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-            ");
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+            );
         } catch (PDOException $e) {
             $errors[] = 'Table creation failed: ' . $e->getMessage();
         }
