@@ -1,0 +1,16 @@
+Options -Indexes
+
+# Block direct access to config and lib files
+<FilesMatch "^config\.php$">
+  Require all denied
+</FilesMatch>
+
+<FilesMatch "\.(php)$">
+  # Allow API and admin — block lib files from direct access
+</FilesMatch>
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  # Block direct access to lib/
+  RewriteRule ^lib/ - [F,L]
+</IfModule>

@@ -1,5 +1,7 @@
 # PHP config (contains secrets — never commit)
 config.php
+hub/config.php
+hub/setup.php
 backups/
 usage.json
 login_attempts.json
