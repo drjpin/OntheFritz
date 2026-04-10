@@ -119,7 +119,6 @@ function resizeImage($src_path, $dest_path, $max_w = 1800) {
 function generateAltText($image_path) {
     $data = base64_encode(file_get_contents($image_path));
     $payload = json_encode([
-        'model'      => 'claude-opus-4-5',
         'max_tokens' => 150,
         'messages'   => [[
             'role'    => 'user',
@@ -129,7 +128,7 @@ function generateAltText($image_path) {
             ],
         ]],
     ]);
-    $ch = curl_init('https://api.anthropic.com/v1/messages');
+    $ch = curl_init(HUB_URL . '/api/ai.php');
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST           => true,
@@ -137,8 +136,7 @@ function generateAltText($image_path) {
         CURLOPT_TIMEOUT        => 60,
         CURLOPT_HTTPHEADER     => [
             'Content-Type: application/json',
-            'x-api-key: ' . ANTHROPIC_API_KEY,
-            'anthropic-version: 2023-06-01',
+            'X-Hub-Key: ' . HUB_KEY,
         ],
     ]);
     $resp = curl_exec($ch);
@@ -367,13 +365,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $user_message = "$context\n\n---\nRequest: $request\n\nReturn ONLY the content as instructed.";
 
         $payload = json_encode([
-            'model'      => 'claude-opus-4-5',
-            'max_tokens' => 8192,
+            'max_tokens' => 4096,
             'system'     => $system_prompt,
             'messages'   => [['role' => 'user', 'content' => $user_message]],
         ]);
 
-        $ch = curl_init('https://api.anthropic.com/v1/messages');
+        $ch = curl_init(HUB_URL . '/api/ai.php');
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST           => true,
@@ -381,8 +378,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             CURLOPT_TIMEOUT        => 180,
             CURLOPT_HTTPHEADER     => [
                 'Content-Type: application/json',
-                'x-api-key: ' . ANTHROPIC_API_KEY,
-                'anthropic-version: 2023-06-01',
+                'X-Hub-Key: ' . HUB_KEY,
             ],
         ]);
 
